@@ -10,11 +10,50 @@ let current=null, selected=Array(7).fill(null);
 const status=document.getElementById('league-status'), games=document.getElementById('live-games'), send=document.getElementById('send-live'), manage=document.getElementById('manage');
 const editor=document.getElementById('edit-games');for(let i=0;i<7;i++){const row=document.createElement('p');const field=document.createElement('input');field.placeholder=`Jogo ${i+1} (ex.: Equipa A × Equipa B)`;field.maxLength=100;field.className='game-input';field.style.cssText='width:100%;padding:10px';row.append(field);editor.append(row)}
 function message(s){status.textContent=s}
-async function refresh(){try{const snapshot=await getDocs(query(collection(db,'rounds'),orderBy('deadline','desc'),limit(1)));if(snapshot.empty){current=null;games.replaceChildren();send.hidden=true;message('Ainda não há jornadas criadas.');return}const r=snapshot.docs[0];current={id:r.id,...r.data()};selected=Array(7).fill(null);games.replaceChildren();let submitted=false;if(auth.currentUser){submitted=(await getDoc(doc(db,'rounds',current.id,'predictions',auth.currentUser.uid))).exists()}const closed=current.deadline.toMillis()<=Date.now();message(`${current.title} · Prazo: ${current.deadline.toDate().toLocaleString('pt-PT',{timeZone:'Europe/Lisbon'})} (Lisboa). ${submitted?'Já enviaste os teus palpites.':closed?'Prazo terminado.':'Escolhe 1, X ou 2 em cada jogo.'}`);current.games.forEach((game,i)=>{const row=document.createElement('div');row.className='row match-row';const choices=document.createElement('div');choices.className='choices';choices.setAttribute('role','group');choices.setAttribute('aria-label',game);const teams=game.split(/\s+(?:x|vs\.?|versus)\s+|\s*×\s*/i).map(t=>t.trim());const names=teams.length===2&&teams.every(Boolean)?[teams[0],'Empate',teams[1]]:['Casa','Empate','Fora'];['1','X','2'].forEach((value,option)=>{const b=document.createElement('button');b.type='button';b.textContent=names[option];b.disabled=submitted||closed;b.onclick=()=>{selected[i]=value;choices.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b))};choices.append(b)});row.append(choices);games.append(row)});send.hidden=submitted||closed;send.textContent=auth.currentUser?'Enviar palpites':'Entra com Google para enviar';}catch(e){console.error(e);message('Não foi possível carregar a jornada. Verifica a ligação e as regras do Firebase.')}}
+const roundPicker=document.createElement('select');
+roundPicker.id='round-picker';
+roundPicker.setAttribute('aria-label','Escolher jornada');
+roundPicker.style.cssText='max-width:100%;padding:10px;margin:8px 0 16px';
+const roundLabel=document.createElement('label');
+roundLabel.textContent='Escolher jornada ';
+roundLabel.append(roundPicker);
+status.before(roundLabel);
+let chosenRound=null, refreshVersion=0;
+roundPicker.onchange=()=>{chosenRound=roundPicker.value;current=null;send.hidden=true;games.replaceChildren();syncAdminRound();message('A carregar jornada…');refresh()};
+async function refresh(){
+  const version=++refreshVersion;
+  try {
+    const snapshot=await getDocs(query(collection(db,'rounds'),orderBy('deadline','desc')));
+    if(version!==refreshVersion)return;
+    roundPicker.replaceChildren();
+    if(snapshot.empty){current=null;games.replaceChildren();send.hidden=true;roundLabel.hidden=true;message('Ainda não há jornadas criadas.');syncAdminRound();return}
+    roundLabel.hidden=false;
+    snapshot.docs.forEach(r=>{const o=document.createElement('option');o.value=r.id;o.textContent=r.data().title||'Jornada';roundPicker.append(o)});
+    let r=snapshot.docs.find(x=>x.id===chosenRound)||snapshot.docs[0];
+    chosenRound=r.id;roundPicker.value=r.id;
+    const next={id:r.id,...r.data()};
+    const submitted=auth.currentUser?(await getDoc(doc(db,'rounds',next.id,'predictions',auth.currentUser.uid))).exists():false;
+    if(version!==refreshVersion)return;
+    current=next;selected=Array(7).fill(null);games.replaceChildren();
+    const closed=current.deadline.toMillis()<=Date.now();
+    message(`${current.title} · Prazo: ${current.deadline.toDate().toLocaleString('pt-PT',{timeZone:'Europe/Lisbon'})} (Lisboa). ${submitted?'Já enviaste os teus palpites.':closed?'Prazo terminado.':'Escolhe 1, X ou 2 em cada jogo.'}`);
+    current.games.forEach((game,i)=>{
+      const row=document.createElement('div');row.className='row match-row';
+      const choices=document.createElement('div');choices.className='choices';choices.setAttribute('role','group');choices.setAttribute('aria-label',game);
+      const teams=game.split(/\s+(?:x|vs\.?|versus)\s+|\s*×\s*/i).map(t=>t.trim());
+      const names=teams.length===2&&teams.every(Boolean)?[teams[0],'Empate',teams[1]]:['Casa','Empate','Fora'];
+      ['1','X','2'].forEach((value,option)=>{const b=document.createElement('button');b.type='button';b.textContent=names[option];b.disabled=submitted||closed;b.onclick=()=>{selected[i]=value;choices.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b))};choices.append(b)});
+      row.append(choices);games.append(row);
+    });
+    send.hidden=submitted||closed;send.textContent=auth.currentUser?'Enviar palpites':'Entra com Google para enviar';
+    syncAdminRound();
+  } catch(e){console.error(e);if(version===refreshVersion)message('Não foi possível carregar a jornada. Verifica a ligação e as regras do Firebase.')}
+}
+
 login.onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){if(e.code!=='auth/popup-closed-by-user')alert('Não foi possível entrar: '+e.code)}};logout.onclick=()=>signOut(auth);
 onAuthStateChanged(auth,user=>{login.hidden=!!user;logout.hidden=!user;name.hidden=!user;name.textContent=user?.displayName||'';manage.hidden=!adminPage || !adminIds.includes(user?.uid);document.getElementById('admin-link').hidden=!adminIds.includes(user?.uid);refresh()});
 send.onclick=async()=>{if(!auth.currentUser){alert('Entra primeiro com Google.');return}if(selected.some(x=>!x)){alert('Escolhe um palpite para cada jogo.');return}send.disabled=true;try{await setDoc(doc(db,'rounds',current.id,'predictions',auth.currentUser.uid),{answers:selected,createdAt:serverTimestamp(),displayName:(await getDoc(doc(db,'profiles',auth.currentUser.uid))).data()?.displayName || auth.currentUser.displayName || 'Participante'});alert('Palpites guardados!');await refresh()}catch(e){console.error(e);alert('Não foi possível guardar. Verifica se o prazo terminou ou se já enviaste palpites.')}finally{send.disabled=false}};
-document.getElementById('create-round').onclick=async()=>{const title=document.getElementById('round-title').value.trim(), list=[...document.querySelectorAll('.game-input')].map(x=>x.value.trim()), date=new Date(document.getElementById('round-deadline').value);if(!title||list.some(x=>!x)||Number.isNaN(date.getTime())||date<=new Date()){alert('Preenche o nome, os sete jogos e um prazo futuro.');return}try{await setDoc(doc(collection(db,'rounds')),{title,games:list,deadline:Timestamp.fromDate(date)});alert('Jornada criada.');await refresh()}catch(e){console.error(e);alert('Não foi possível criar a jornada. Verifica as regras e a tua conta de administrador.')}};
+document.getElementById('create-round').onclick=async()=>{const title=document.getElementById('round-title').value.trim(), list=[...document.querySelectorAll('.game-input')].map(x=>x.value.trim()), date=new Date(document.getElementById('round-deadline').value);if(!title||list.some(x=>!x)||Number.isNaN(date.getTime())||date<=new Date()){alert('Preenche o nome, os sete jogos e um prazo futuro.');return}try{const newRound=doc(collection(db,'rounds'));await setDoc(newRound,{title,games:list,deadline:Timestamp.fromDate(date)});chosenRound=newRound.id;alert('Jornada criada.');await refresh()}catch(e){console.error(e);alert('Não foi possível criar a jornada. Verifica as regras e a tua conta de administrador.')}};
 
 // Results and public leaderboards are published only by the administrator.
 const rankings=document.createElement('section');rankings.className='card live-rankings';rankings.style.marginTop='24px';rankings.innerHTML='<div class="league-eyebrow">A CORRIDA AO TOPO</div><h2>Classificações</h2><div class="choices ranking-tabs"><button type="button" id="ranking-week">Semanal</button><button type="button" id="ranking-total">Geral</button></div><p id="ranking-caption"></p><div id="ranking-list"></div>';ui.after(rankings);if(!adminPage){const layout=document.createElement("div");layout.className="league-layout";ui.before(layout);layout.append(ui,rankings)}
@@ -153,3 +192,47 @@ async function loadRequests(){
   }catch(e){console.error(e);requestsList.textContent='Não foi possível carregar os pedidos.'}
 }
 requestsPanel.querySelector('#requests-refresh').onclick=loadRequests;
+
+
+
+const submissionsPanel=document.createElement('div');
+submissionsPanel.innerHTML='<hr><h2>Palpites dos participantes</h2><p>Escolhe uma jornada acima para consultar as respostas.</p><button type="button" id="refresh-submissions">Atualizar respostas</button><div id="submissions-list"></div>';
+manage.append(submissionsPanel);
+const submissionsList=submissionsPanel.querySelector('#submissions-list');
+let submissionsVersion=0;
+async function loadSubmissions(){
+  const version=++submissionsVersion, round=current, user=auth.currentUser;
+  submissionsList.replaceChildren();
+  if(!adminPage||!user||!adminIds.includes(user.uid)||!round)return;
+  submissionsList.textContent='A carregar respostas…';
+  try{
+    const snap=await getDocs(collection(db,'rounds',round.id,'predictions'));
+    if(version!==submissionsVersion||current?.id!==round.id||auth.currentUser?.uid!==user.uid)return;
+    submissionsList.replaceChildren();
+    const count=document.createElement('p');count.textContent=snap.size+' participante(s) nesta jornada.';submissionsList.append(count);
+    const entries=snap.docs.map(d=>d.data()).sort((a,b)=>(a.displayName||'').localeCompare(b.displayName||'','pt'));
+    entries.forEach(p=>{
+      const box=document.createElement('div');box.style.cssText='padding:12px 0;border-bottom:1px solid #dbe3eb';
+      const title=document.createElement('strong');title.textContent=p.displayName||'Participante';box.append(title);
+      const list=document.createElement('ol');
+      (round.games||[]).forEach((game,i)=>{const li=document.createElement('li');li.textContent=game+' — '+(p.answers?.[i]||'Sem resposta');list.append(li)});
+      box.append(list);submissionsList.append(box);
+    });
+  }catch(e){console.error(e);if(version===submissionsVersion)submissionsList.textContent='Não foi possível carregar as respostas.'}
+}
+submissionsPanel.querySelector('#refresh-submissions').onclick=loadSubmissions;
+function syncAdminRound(){
+  resultChoices.fill(null);
+  [...resultGames.children].forEach((row,i)=>{
+    row.querySelector('span').textContent=current?.games?.[i]||'Jogo '+(i+1);
+    row.querySelectorAll('button').forEach(b=>{
+      const active=current?.results?.[i]===b.textContent;
+      b.classList.toggle('active',active);
+      if(active)resultChoices[i]=b.textContent;
+    });
+  });
+  loadSubmissions();
+}
+
+const saveResultsAction=document.getElementById('save-results').onclick;
+document.getElementById('save-results').onclick=async()=>{roundPicker.disabled=true;try{await saveResultsAction()}finally{roundPicker.disabled=false}};
