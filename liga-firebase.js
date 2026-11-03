@@ -27,7 +27,7 @@ async function refresh(){
     if(version!==refreshVersion)return;
     roundPicker.replaceChildren();
     if(snapshot.empty){current=null;games.replaceChildren();send.hidden=true;roundLabel.hidden=true;message('Ainda não há jornadas criadas.');syncAdminRound();return}
-    roundLabel.hidden=false;
+    roundLabel.hidden=!adminPage;
     snapshot.docs.forEach(r=>{const o=document.createElement('option');o.value=r.id;o.textContent=r.data().title||'Jornada';roundPicker.append(o)});
     let r=snapshot.docs.find(x=>x.id===chosenRound)||snapshot.docs[0];
     chosenRound=r.id;roundPicker.value=r.id;
@@ -62,8 +62,8 @@ const resultChoices=Array(7).fill(null), resultGames=document.getElementById('re
 for(let i=0;i<7;i++){const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent='Jogo '+(i+1);const buttons=document.createElement('div');buttons.className='choices';['1','X','2'].forEach(v=>{const b=document.createElement('button');b.type='button';b.textContent=v;b.onclick=()=>{resultChoices[i]=v;buttons.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b))};buttons.append(b)});row.append(label,buttons);resultGames.append(row)}
 const rankingList=document.getElementById('ranking-list'),rankingCaption=document.getElementById('ranking-caption');
 async function showStandings(which){document.getElementById('ranking-week').classList.toggle('active',which==='weekly');document.getElementById('ranking-total').classList.toggle('active',which==='total');rankingList.replaceChildren();try{const snap=await getDoc(doc(db,'publicStandings',which));if(!snap.exists()){rankingCaption.textContent='Ainda não há classificação publicada.';return}const data=snap.data();rankingCaption.textContent=which==='weekly'?'Jornada: '+data.title:'Pontos acumulados nas jornadas corrigidas.';if(!data.rows.length){rankingCaption.textContent+=' Ainda não há palpites corrigidos.';return}data.rows.forEach((entry,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent=(i+1)+'.º · '+entry.name;const points=document.createElement('strong');points.textContent=entry.points+' pts';row.append(label,points);rankingList.append(row)})}catch(e){console.error(e);rankingCaption.textContent='Não foi possível carregar a classificação.'}}
-document.getElementById('ranking-week').onclick=()=>showStandings('weekly');document.getElementById('ranking-total').onclick=()=>showStandings('total');showStandings('weekly');
-document.getElementById('save-results').onclick=async()=>{if(!adminIds.includes(auth.currentUser?.uid)||!current){alert('Entra como organizador e cria uma jornada.');return}if(resultChoices.some(x=>!x)){alert('Seleciona os sete resultados.');return}if(Date.now()<current.deadline.toMillis()){alert('Espera até ao fim do prazo da jornada para publicar resultados.');return}const button=document.getElementById('save-results');button.disabled=true;try{await setDoc(doc(db,'rounds',current.id),{results:resultChoices},{merge:true});const all=await getDocs(collection(db,'rounds'));const totals=new Map();let weekly=[];for(const round of all.docs){const data=round.data();if(!Array.isArray(data.results)||data.results.length!==7)continue;const entries=await getDocs(collection(db,'rounds',round.id,'predictions'));for(const entry of entries.docs){const p=entry.data();if(!Array.isArray(p.answers))continue;const score=p.answers.reduce((sum,answer,i)=>sum+(answer===data.results[i]?1:0),0);const person=totals.get(entry.id)||{uid:entry.id,name:p.displayName||'Participante',points:0};person.name=p.displayName||person.name;person.points+=score;totals.set(entry.id,person);if(round.id===current.id)weekly.push({name:p.displayName||'Participante',points:score})}}const sort=(a,b)=>b.points-a.points||a.name.localeCompare(b.name,'pt');weekly.sort(sort);const total=[...totals.values()].sort(sort);await setDoc(doc(db,'publicStandings','weekly'),{title:current.title,rows:weekly});await setDoc(doc(db,'publicStandings','total'),{rows:total});alert('Resultados guardados e classificações atualizadas.');await showStandings('weekly')}catch(e){console.error(e);alert('Não foi possível atualizar. Confirma que publicaste as regras mais recentes e tenta novamente.')}finally{button.disabled=false}};
+document.getElementById('ranking-week').onclick=()=>showStandings('weekly');document.getElementById('ranking-total').onclick=()=>showStandings('total');
+document.getElementById('save-results').onclick=async()=>{if(!adminIds.includes(auth.currentUser?.uid)||!current){alert('Entra como organizador e cria uma jornada.');return}if(resultChoices.some(x=>!x)){alert('Seleciona os sete resultados.');return}if(Date.now()<current.deadline.toMillis()){alert('Espera até ao fim do prazo da jornada para publicar resultados.');return}const button=document.getElementById('save-results');button.disabled=true;try{await setDoc(doc(db,'rounds',current.id),{results:resultChoices},{merge:true});const all=await getDocs(collection(db,'rounds'));const totals=new Map();let weekly=[];for(const round of all.docs){const data=round.data();if(!Array.isArray(data.results)||data.results.length!==7)continue;const entries=await getDocs(collection(db,'rounds',round.id,'predictions'));for(const entry of entries.docs){const p=entry.data();if(!Array.isArray(p.answers))continue;const score=p.answers.reduce((sum,answer,i)=>sum+(answer===data.results[i]?1:0),0);const person=totals.get(entry.id)||{uid:entry.id,name:p.displayName||'Participante',points:0};person.name=p.displayName||person.name;person.points+=score;totals.set(entry.id,person);if(round.id===current.id)weekly.push({name:p.displayName||'Participante',points:score})}}const sort=(a,b)=>b.points-a.points||a.name.localeCompare(b.name,'pt');weekly.sort(sort);const total=[...totals.values()].sort(sort);await setDoc(doc(db,'publicStandings','weekly'),{title:current.title,rows:weekly});await setDoc(doc(db,'publicStandings','round_'+current.id),{title:current.title,rows:weekly});await setDoc(doc(db,'publicStandings','total'),{rows:total});alert('Resultados guardados e classificações atualizadas.');await showStandings('weekly')}catch(e){console.error(e);alert('Não foi possível atualizar. Confirma que publicaste as regras mais recentes e tenta novamente.')}finally{button.disabled=false}};
 
 
 
@@ -236,3 +236,50 @@ function syncAdminRound(){
 
 const saveResultsAction=document.getElementById('save-results').onclick;
 document.getElementById('save-results').onclick=async()=>{roundPicker.disabled=true;try{await saveResultsAction()}finally{roundPicker.disabled=false}};
+
+
+
+const rankingSelectorLabel=document.createElement('label');
+rankingSelectorLabel.textContent='Escolher jornada ';
+const rankingSelector=document.createElement('select');
+rankingSelector.style.cssText='max-width:100%;padding:10px;margin:8px 0 16px';
+rankingSelector.setAttribute('aria-label','Escolher jornada da classificação');
+rankingSelectorLabel.append(rankingSelector);
+rankingCaption.before(rankingSelectorLabel);
+let selectedRanking='', rankingVersion=0, rankingChoices=new Map();
+const generalAndOldWeekly=showStandings;
+showStandings=async function(which){
+  const version=++rankingVersion;
+  rankingSelectorLabel.hidden=which!=='weekly';
+  if(which!=='weekly')return generalAndOldWeekly(which);
+  document.getElementById('ranking-week').classList.add('active');
+  document.getElementById('ranking-total').classList.remove('active');
+  rankingList.replaceChildren();rankingCaption.textContent='A carregar jornadas…';
+  try{
+    const [response,stored]=await Promise.all([fetch('classificacao-jornadas.json'),getDocs(collection(db,'publicStandings'))]);
+    if(!response.ok)throw new Error('Classificações anteriores indisponíveis');
+    const legacy=await response.json();
+    if(version!==rankingVersion)return;
+    rankingChoices=new Map();
+    legacy.forEach(item=>rankingChoices.set('legacy_'+item.id,item));
+    stored.forEach(item=>{if(item.id.startsWith('round_'))rankingChoices.set(item.id,item.data())});
+    const latest=stored.docs.find(x=>x.id==='weekly');
+    if(latest)rankingChoices.set('latest',{...latest.data(),title:'Última jornada publicada — '+(latest.data().title||'Jornada')});
+    rankingSelector.replaceChildren();
+    rankingChoices.forEach((value,key)=>{const opt=document.createElement('option');opt.value=key;opt.textContent=value.title||'Jornada';rankingSelector.append(opt)});
+    if(!rankingChoices.size){rankingCaption.textContent='Ainda não há classificações publicadas.';return}
+    if(!rankingChoices.has(selectedRanking))selectedRanking=rankingChoices.has('latest')?'latest':rankingChoices.keys().next().value;
+    rankingSelector.value=selectedRanking;
+    renderWeeklySelection();
+  }catch(e){console.error(e);if(version===rankingVersion)rankingCaption.textContent='Não foi possível carregar as classificações das jornadas.'}
+};
+function renderWeeklySelection(){
+  const data=rankingChoices.get(selectedRanking);rankingList.replaceChildren();
+  if(!data){rankingCaption.textContent='Ainda não há classificação publicada.';return}
+  rankingCaption.textContent=data.title||'Jornada';
+  const rows=Array.isArray(data.rows)?data.rows:[];
+  if(!rows.length){rankingCaption.textContent+=' · Ainda não há palpites corrigidos.';return}
+  rows.forEach((entry,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent=(i+1)+'.º · '+entry.name;const points=document.createElement('strong');points.textContent=entry.points+' pts';row.append(label,points);rankingList.append(row)});
+}
+rankingSelector.onchange=()=>{selectedRanking=rankingSelector.value;renderWeeklySelection()};
+showStandings('weekly');
