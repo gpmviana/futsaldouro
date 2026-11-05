@@ -6,7 +6,7 @@ const safePublicName = value => String(value || 'Participante').replace(/[A-Z0-9
 const auth=getAuth(app), db=getFirestore(app), adminIds=['dFMaDaxMwSdhbRAVREytL40OnzP2','rVTyrFQWkuZ7ZoueMQclGJWREhr1'];
 const login=document.querySelector('#login-google'), logout=document.querySelector('#logout-google'), name=document.querySelector('#auth-name');
 const adminPage=location.pathname.endsWith('/admin.html'); const league=document.getElementById('liga'), grid=league.querySelector('.grid');
-const ui=document.createElement('section');ui.className='card live-league';ui.style.marginTop='32px';ui.innerHTML='<div class="league-eyebrow">LIGA FD · PALPITES</div><h2>A jornada</h2><p id="league-status">A carregar jornada…</p><div id="live-games"></div><button id="send-live" class="cta" type="button" hidden>Enviar palpites</button><div id="manage" hidden><hr><h2>Área de organização</h2><p>Cria uma jornada de teste. O prazo é interpretado na hora do teu computador.</p><label>Nome da jornada <input id="round-title" value="Jornada de teste" maxlength="60"></label><div id="edit-games"></div><label>Prazo <input id="round-deadline" type="datetime-local"></label><p><button id="create-round" type="button">Criar jornada</button></p></div>';grid.before(ui);
+const ui=document.createElement('section');ui.className='card live-league';ui.style.marginTop='32px';ui.innerHTML='<div class="league-eyebrow">LIGA FD · PALPITES</div><h2>A jornada</h2><p id="league-status">A carregar jornada…</p><div id="live-games"></div><button id="send-live" class="cta" type="button" hidden>Enviar palpites</button><div id="manage" hidden><hr><h2>Área de organização</h2><p>Cria uma jornada de teste. O prazo é interpretado na hora do teu computador.</p><label>Nome da jornada <input id="round-title" placeholder="Ex.: Jornada 5" maxlength="60"></label><div id="edit-games"></div><label>Prazo <input id="round-deadline" type="datetime-local"></label><p><button id="create-round" type="button">Criar jornada</button></p></div>';grid.before(ui);
 let current=null, selected=Array(7).fill(null);
 const status=document.getElementById('league-status'), games=document.getElementById('live-games'), send=document.getElementById('send-live'), manage=document.getElementById('manage');
 const editor=document.getElementById('edit-games');for(let i=0;i<7;i++){const row=document.createElement('p');const field=document.createElement('input');field.placeholder=`Jogo ${i+1} (ex.: Equipa A × Equipa B)`;field.maxLength=100;field.className='game-input';field.style.cssText='width:100%;padding:10px';row.append(field);editor.append(row)}
@@ -311,5 +311,42 @@ deleteSection.querySelector('#delete-round').onclick=async()=>{
     chosenRound=null;selectedRanking='';alert('Jornada eliminada e classificações atualizadas.');await refresh();await showStandings('weekly');
   }catch(e){console.error(e);alert('Não foi possível concluir a eliminação. Algumas alterações podem já ter sido feitas; confirma as permissões e tenta atualizar as classificações.')}finally{button.disabled=false;roundPicker.disabled=false}
 };
+
+
+
+
+// Painel de administração: mantém os controlos existentes, organizados por tarefa.
+if(adminPage){
+  const createBox=document.createElement('section');createBox.className='admin-panel';
+  createBox.innerHTML='<div class="admin-kicker">JORNADAS</div><h2>Criar jornada</h2><p>Preenche os jogos e escolhe a data limite. As opções da liga aparecem automaticamente.</p>';
+  const createTitle=document.getElementById('round-title').closest('label');
+  const deadlineLabel=document.getElementById('round-deadline').closest('label');
+  const createButton=document.getElementById('create-round').closest('p');
+  [createTitle,editor,deadlineLabel,createButton].forEach(x=>createBox.append(x));
+  const editBox=document.createElement('section');editBox.className='admin-panel';
+  editBox.innerHTML='<div class="admin-kicker">JORNADA SELECIONADA</div><h2>Editar jornada</h2><p>Altera o nome ou prolonga o prazo. Os jogos ficam bloqueados após a criação para proteger os palpites.</p><label>Nome <input id="edit-round-title" maxlength="60"></label><label>Prazo <input id="edit-round-deadline" type="datetime-local"></label><p id="edit-round-status" role="status"></p><button type="button" id="save-round-edits">Guardar alterações</button>';
+  const editTitle=editBox.querySelector('#edit-round-title'), editDeadline=editBox.querySelector('#edit-round-deadline'), editStatus=editBox.querySelector('#edit-round-status');
+  const toInputDate = date => {const d=new Date(date.getTime()-date.getTimezoneOffset()*60000);return d.toISOString().slice(0,16)};
+  function fillRoundEdit(){const r=current;editTitle.value=r?.title||'';editDeadline.value=r?.deadline?toInputDate(r.deadline.toDate()):'';editStatus.textContent=r?'Selecionada: '+r.title:'Seleciona uma jornada.';editBox.querySelector('#save-round-edits').disabled=!r}
+  const oldSync=syncAdminRound;syncAdminRound=function(){oldSync();fillRoundEdit()};
+  editBox.querySelector('#save-round-edits').onclick=async()=>{
+    const r=current,title=editTitle.value.trim(),deadline=new Date(editDeadline.value);
+    if(!adminIds.includes(auth.currentUser?.uid)||!r)return;
+    if(!title||Number.isNaN(deadline.getTime())){editStatus.textContent='Preenche o nome e um prazo válido.';return}
+    const oldDeadline=r.deadline.toDate();
+    if(deadline.getTime()!==oldDeadline.getTime()&&(oldDeadline<=new Date()||deadline<oldDeadline)){editStatus.textContent='Só é possível prolongar o prazo de uma jornada ainda aberta.';return}
+    const button=editBox.querySelector('#save-round-edits');button.disabled=true;
+    try{await setDoc(doc(db,'rounds',r.id),{title,deadline:Timestamp.fromDate(deadline)},{merge:true});editStatus.textContent='Alterações guardadas.';await refresh()}catch(e){console.error(e);editStatus.textContent='Não foi possível guardar as alterações.'}finally{button.disabled=false}
+  };
+  const dashboard=document.createElement('div');dashboard.className='admin-dashboard';
+  const overview=document.createElement('div');overview.className='admin-overview';overview.innerHTML='<div><div class="admin-kicker">FUTSAL DOURO</div><h1>Gestão da Liga FD</h1><p>Escolhe uma jornada e gere tudo no mesmo lugar.</p></div><div class="admin-round-select"></div>';
+  overview.querySelector('.admin-round-select').append(roundLabel);
+  const nav=document.createElement('nav');nav.className='admin-tabs';nav.setAttribute('aria-label','Áreas de administração');
+  const content=document.createElement('div');content.className='admin-content';
+  const sections=[['jornadas','Jornadas',[createBox,editBox,deleteSection]],['resultados','Resultados',[resultsPanel]],['palpites','Palpites',[submissionsPanel]],['pedidos','Pedidos',[requestsPanel]]];
+  const panels=[];
+  sections.forEach(([id,label,children],index)=>{const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.adminSection=id;button.setAttribute('aria-pressed',index===0?'true':'false');nav.append(button);const panel=document.createElement('div');panel.className='admin-view';panel.hidden=index!==0;children.forEach(child=>{child.classList.add('admin-panel');panel.append(child)});content.append(panel);panels.push({id,button,panel});button.onclick=()=>{panels.forEach(item=>{const active=item.id===id;item.panel.hidden=!active;item.button.setAttribute('aria-pressed',active?'true':'false')});if(id==='palpites')loadSubmissions();if(id==='pedidos')loadRequests()}});
+  manage.replaceChildren();dashboard.append(overview,nav,content);manage.append(dashboard);fillRoundEdit();
+}
 
 
