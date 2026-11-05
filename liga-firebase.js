@@ -1,7 +1,8 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, serverTimestamp, Timestamp, query, orderBy, limit, runTransaction } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, serverTimestamp, Timestamp, query, orderBy, limit, runTransaction, writeBatch, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 const app=initializeApp({apiKey:'AIzaSyB2k_XUrY51_lCbtG-VJqH-ZgXpVtP68WU',authDomain:'futsaldouro-cc217.firebaseapp.com',projectId:'futsaldouro-cc217',storageBucket:'futsaldouro-cc217.firebasestorage.app',messagingSenderId:'350871531138',appId:'1:350871531138:web:25096ec08bca6da82a8e9b'});
+const safePublicName = value => String(value || 'Participante').replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, email => email.split('@')[0]);
 const auth=getAuth(app), db=getFirestore(app), adminIds=['dFMaDaxMwSdhbRAVREytL40OnzP2','rVTyrFQWkuZ7ZoueMQclGJWREhr1'];
 const login=document.querySelector('#login-google'), logout=document.querySelector('#logout-google'), name=document.querySelector('#auth-name');
 const adminPage=location.pathname.endsWith('/admin.html'); const league=document.getElementById('liga'), grid=league.querySelector('.grid');
@@ -52,7 +53,7 @@ async function refresh(){
 
 login.onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){if(e.code!=='auth/popup-closed-by-user')alert('Não foi possível entrar: '+e.code)}};logout.onclick=()=>signOut(auth);
 onAuthStateChanged(auth,user=>{login.hidden=!!user;logout.hidden=!user;name.hidden=!user;name.textContent=user?.displayName||'';manage.hidden=!adminPage || !adminIds.includes(user?.uid);document.getElementById('admin-link').hidden=!adminIds.includes(user?.uid);refresh()});
-send.onclick=async()=>{if(!auth.currentUser){alert('Entra primeiro com Google.');return}if(selected.some(x=>!x)){alert('Escolhe um palpite para cada jogo.');return}send.disabled=true;try{await setDoc(doc(db,'rounds',current.id,'predictions',auth.currentUser.uid),{answers:selected,createdAt:serverTimestamp(),displayName:(await getDoc(doc(db,'profiles',auth.currentUser.uid))).data()?.displayName || auth.currentUser.displayName || 'Participante'});alert('Palpites guardados!');await refresh()}catch(e){console.error(e);alert('Não foi possível guardar. Verifica se o prazo terminou ou se já enviaste palpites.')}finally{send.disabled=false}};
+send.onclick=async()=>{if(!auth.currentUser){alert('Entra primeiro com Google.');return}if(selected.some(x=>!x)){alert('Escolhe um palpite para cada jogo.');return}send.disabled=true;try{await setDoc(doc(db,'rounds',current.id,'predictions',auth.currentUser.uid),{answers:selected,createdAt:serverTimestamp(),displayName:safePublicName((await getDoc(doc(db,'profiles',auth.currentUser.uid))).data()?.displayName || auth.currentUser.displayName || 'Participante').slice(0,80)});alert('Palpites guardados!');await refresh()}catch(e){console.error(e);alert('Não foi possível guardar. Verifica se o prazo terminou ou se já enviaste palpites.')}finally{send.disabled=false}};
 document.getElementById('create-round').onclick=async()=>{const title=document.getElementById('round-title').value.trim(), list=[...document.querySelectorAll('.game-input')].map(x=>x.value.trim()), date=new Date(document.getElementById('round-deadline').value);if(!title||list.some(x=>!x)||Number.isNaN(date.getTime())||date<=new Date()){alert('Preenche o nome, os sete jogos e um prazo futuro.');return}try{const newRound=doc(collection(db,'rounds'));await setDoc(newRound,{title,games:list,deadline:Timestamp.fromDate(date)});chosenRound=newRound.id;alert('Jornada criada.');await refresh()}catch(e){console.error(e);alert('Não foi possível criar a jornada. Verifica as regras e a tua conta de administrador.')}};
 
 // Results and public leaderboards are published only by the administrator.
@@ -61,9 +62,9 @@ const resultsPanel=document.createElement('div');resultsPanel.innerHTML='<hr><h2
 const resultChoices=Array(7).fill(null), resultGames=document.getElementById('result-games');
 for(let i=0;i<7;i++){const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent='Jogo '+(i+1);const buttons=document.createElement('div');buttons.className='choices';['1','X','2'].forEach(v=>{const b=document.createElement('button');b.type='button';b.textContent=v;b.onclick=()=>{resultChoices[i]=v;buttons.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b))};buttons.append(b)});row.append(label,buttons);resultGames.append(row)}
 const rankingList=document.getElementById('ranking-list'),rankingCaption=document.getElementById('ranking-caption');
-async function showStandings(which){document.getElementById('ranking-week').classList.toggle('active',which==='weekly');document.getElementById('ranking-total').classList.toggle('active',which==='total');rankingList.replaceChildren();try{const snap=await getDoc(doc(db,'publicStandings',which));if(!snap.exists()){rankingCaption.textContent='Ainda não há classificação publicada.';return}const data=snap.data();rankingCaption.textContent=which==='weekly'?'Jornada: '+data.title:'Pontos acumulados nas jornadas corrigidas.';if(!data.rows.length){rankingCaption.textContent+=' Ainda não há palpites corrigidos.';return}data.rows.forEach((entry,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent=(i+1)+'.º · '+entry.name;const points=document.createElement('strong');points.textContent=entry.points+' pts';row.append(label,points);rankingList.append(row)})}catch(e){console.error(e);rankingCaption.textContent='Não foi possível carregar a classificação.'}}
+async function showStandings(which){document.getElementById('ranking-week').classList.toggle('active',which==='weekly');document.getElementById('ranking-total').classList.toggle('active',which==='total');rankingList.replaceChildren();try{const snap=await getDoc(doc(db,'publicStandings',which));if(!snap.exists()){rankingCaption.textContent='Ainda não há classificação publicada.';return}const data=snap.data();rankingCaption.textContent=which==='weekly'?'Jornada: '+data.title:'Pontos acumulados nas jornadas corrigidas.';if(!data.rows.length){rankingCaption.textContent+=' Ainda não há palpites corrigidos.';return}data.rows.forEach((entry,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent=(i+1)+'.º · '+safePublicName(entry.name);const points=document.createElement('strong');points.textContent=entry.points+' pts';row.append(label,points);rankingList.append(row)})}catch(e){console.error(e);rankingCaption.textContent='Não foi possível carregar a classificação.'}}
 document.getElementById('ranking-week').onclick=()=>showStandings('weekly');document.getElementById('ranking-total').onclick=()=>showStandings('total');
-document.getElementById('save-results').onclick=async()=>{if(!adminIds.includes(auth.currentUser?.uid)||!current){alert('Entra como organizador e cria uma jornada.');return}if(resultChoices.some(x=>!x)){alert('Seleciona os sete resultados.');return}if(Date.now()<current.deadline.toMillis()){alert('Espera até ao fim do prazo da jornada para publicar resultados.');return}const button=document.getElementById('save-results');button.disabled=true;try{await setDoc(doc(db,'rounds',current.id),{results:resultChoices},{merge:true});const all=await getDocs(collection(db,'rounds'));const totals=new Map();let weekly=[];for(const round of all.docs){const data=round.data();if(!Array.isArray(data.results)||data.results.length!==7)continue;const entries=await getDocs(collection(db,'rounds',round.id,'predictions'));for(const entry of entries.docs){const p=entry.data();if(!Array.isArray(p.answers))continue;const score=p.answers.reduce((sum,answer,i)=>sum+(answer===data.results[i]?1:0),0);const person=totals.get(entry.id)||{uid:entry.id,name:p.displayName||'Participante',points:0};person.name=p.displayName||person.name;person.points+=score;totals.set(entry.id,person);if(round.id===current.id)weekly.push({name:p.displayName||'Participante',points:score})}}const sort=(a,b)=>b.points-a.points||a.name.localeCompare(b.name,'pt');weekly.sort(sort);const total=[...totals.values()].sort(sort);await setDoc(doc(db,'publicStandings','weekly'),{title:current.title,rows:weekly});await setDoc(doc(db,'publicStandings','round_'+current.id),{title:current.title,rows:weekly});await setDoc(doc(db,'publicStandings','total'),{rows:total});alert('Resultados guardados e classificações atualizadas.');await showStandings('weekly')}catch(e){console.error(e);alert('Não foi possível atualizar. Confirma que publicaste as regras mais recentes e tenta novamente.')}finally{button.disabled=false}};
+document.getElementById('save-results').onclick=async()=>{if(!adminIds.includes(auth.currentUser?.uid)||!current){alert('Entra como organizador e cria uma jornada.');return}if(resultChoices.some(x=>!x)){alert('Seleciona os sete resultados.');return}if(Date.now()<current.deadline.toMillis()){alert('Espera até ao fim do prazo da jornada para publicar resultados.');return}const button=document.getElementById('save-results');button.disabled=true;try{await setDoc(doc(db,'rounds',current.id),{results:resultChoices},{merge:true});const all=await getDocs(collection(db,'rounds'));const totals=new Map();let weekly=[];for(const round of all.docs){const data=round.data();if(!Array.isArray(data.results)||data.results.length!==7)continue;const entries=await getDocs(collection(db,'rounds',round.id,'predictions'));for(const entry of entries.docs){const p=entry.data();if(!Array.isArray(p.answers))continue;const score=p.answers.reduce((sum,answer,i)=>sum+(answer===data.results[i]?1:0),0);const person=totals.get(entry.id)||{uid:entry.id,name:safePublicName(p.displayName),points:0};person.name=safePublicName(p.displayName||person.name);person.points+=score;totals.set(entry.id,person);if(round.id===current.id)weekly.push({name:safePublicName(p.displayName),points:score})}}const sort=(a,b)=>b.points-a.points||a.name.localeCompare(b.name,'pt');weekly.sort(sort);const total=[...totals.values()].sort(sort);await setDoc(doc(db,'publicStandings','weekly'),{title:current.title,rows:weekly.map(x=>({...x,name:safePublicName(x.name)}))});await setDoc(doc(db,'publicStandings','round_'+current.id),{title:current.title,rows:weekly.map(x=>({...x,name:safePublicName(x.name)}))});await setDoc(doc(db,'publicStandings','total'),{rows:total.map(x=>({...x,name:safePublicName(x.name)}))});alert('Resultados guardados e classificações atualizadas.');await showStandings('weekly')}catch(e){console.error(e);alert('Não foi possível atualizar. Confirma que publicaste as regras mais recentes e tenta novamente.')}finally{button.disabled=false}};
 
 
 
@@ -111,7 +112,7 @@ showStandings = async function(which) {
     claimByUser.forEach((name,uid)=>{const row=byName.get(name);if(row && profileByUser.get(uid))row.name=profileByUser.get(uid)});
     const rows=[...byName.values(),...extra].sort((a,b)=>b.points-a.points||a.name.localeCompare(b.name,'pt'));
     rankingCaption.textContent='Pontos das primeiras jornadas e das jornadas corrigidas no site.';
-    rows.forEach((entry,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent=(i+1)+'.º · '+entry.name;const points=document.createElement('strong');points.textContent=entry.points+' pts';row.append(label,points);rankingList.append(row)});
+    rows.forEach((entry,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent=(i+1)+'.º · '+safePublicName(entry.name);const points=document.createElement('strong');points.textContent=entry.points+' pts';row.append(label,points);rankingList.append(row)});
   } catch(e) {console.error(e);rankingCaption.textContent='Não foi possível carregar a classificação geral.'}
 };
 
@@ -144,7 +145,7 @@ onAuthStateChanged(auth,async user=>{
 });
 profilePanel.querySelector('#profile-save').onclick=async()=>{
   const user=auth.currentUser, displayName=profileName.value.trim();
-  if(!user||!displayName||displayName.length>80){profileStatus.textContent='Escreve um nome com até 80 caracteres.';return}
+  if(!user||!displayName||displayName.length>80||displayName.includes('@')){profileStatus.textContent='Escreve um nome sem email, com até 80 caracteres.';return}
   try{await setDoc(doc(db,'profiles',user.uid),{displayName});profileStatus.textContent='Nome guardado.';if(document.getElementById('ranking-total').classList.contains('active'))await showStandings('total')}catch(e){console.error(e);profileStatus.textContent='Não foi possível guardar o nome.'}
 };
 profilePanel.querySelector('#profile-request').onclick=async()=>{
@@ -152,7 +153,7 @@ profilePanel.querySelector('#profile-request').onclick=async()=>{
   if(!user||!legacyName){profileStatus.textContent='Seleciona o teu nome anterior.';return}
   try{
     if((await getDoc(doc(db,'legacyAccounts',user.uid))).exists()){profileStatus.textContent='Esta conta já tem pontos associados.';return}
-    await setDoc(doc(db,'profileRequests',user.uid),{legacyName,displayName:profileName.value.trim()||user.displayName||'Participante'});
+    await setDoc(doc(db,'profileRequests',user.uid),{legacyName,displayName:safePublicName(profileName.value.trim()||user.displayName||'Participante').slice(0,80)});
     profileStatus.textContent='Pedido enviado. Aguarda a confirmação da organização.';
   }catch(e){console.error(e);profileStatus.textContent='Não foi possível enviar o pedido.'}
 };
@@ -196,7 +197,7 @@ requestsPanel.querySelector('#requests-refresh').onclick=loadRequests;
 
 
 const submissionsPanel=document.createElement('div');
-submissionsPanel.innerHTML='<hr><h2>Palpites dos participantes</h2><p>Escolhe uma jornada acima para consultar as respostas.</p><button type="button" id="refresh-submissions">Atualizar respostas</button><div id="submissions-list"></div>';
+submissionsPanel.innerHTML='<hr><h2>Palpites dos participantes</h2><p>Escolhe uma jornada acima para consultar as respostas.</p><label>Procurar participante <input type="search" id="search-submissions" placeholder="Nome do participante"></label> <button type="button" id="refresh-submissions">Atualizar respostas</button><div id="submissions-list"></div>';
 manage.append(submissionsPanel);
 const submissionsList=submissionsPanel.querySelector('#submissions-list');
 let submissionsVersion=0;
@@ -211,9 +212,10 @@ async function loadSubmissions(){
     submissionsList.replaceChildren();
     const count=document.createElement('p');count.textContent=snap.size+' participante(s) nesta jornada.';submissionsList.append(count);
     const entries=snap.docs.map(d=>d.data()).sort((a,b)=>(a.displayName||'').localeCompare(b.displayName||'','pt'));
-    entries.forEach(p=>{
-      const box=document.createElement('div');box.style.cssText='padding:12px 0;border-bottom:1px solid #dbe3eb';
-      const title=document.createElement('strong');title.textContent=p.displayName||'Participante';box.append(title);
+    const search=(submissionsPanel.querySelector('#search-submissions').value||'').trim().toLocaleLowerCase('pt');
+    entries.filter(p=>(p.displayName||'Participante').toLocaleLowerCase('pt').includes(search)).forEach(p=>{
+      const box=document.createElement('details');box.style.cssText='padding:12px 0;border-bottom:1px solid #dbe3eb';
+      const title=document.createElement('summary');title.style.cursor='pointer';title.textContent=p.displayName||'Participante';box.append(title);
       const list=document.createElement('ol');
       (round.games||[]).forEach((game,i)=>{const li=document.createElement('li');li.textContent=game+' — '+(p.answers?.[i]||'Sem resposta');list.append(li)});
       box.append(list);submissionsList.append(box);
@@ -221,6 +223,7 @@ async function loadSubmissions(){
   }catch(e){console.error(e);if(version===submissionsVersion)submissionsList.textContent='Não foi possível carregar as respostas.'}
 }
 submissionsPanel.querySelector('#refresh-submissions').onclick=loadSubmissions;
+submissionsPanel.querySelector('#search-submissions').addEventListener('change',loadSubmissions);
 function syncAdminRound(){
   resultChoices.fill(null);
   [...resultGames.children].forEach((row,i)=>{
@@ -279,7 +282,32 @@ function renderWeeklySelection(){
   rankingCaption.textContent=data.title||'Jornada';
   const rows=Array.isArray(data.rows)?data.rows:[];
   if(!rows.length){rankingCaption.textContent+=' · Ainda não há palpites corrigidos.';return}
-  rows.forEach((entry,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent=(i+1)+'.º · '+entry.name;const points=document.createElement('strong');points.textContent=entry.points+' pts';row.append(label,points);rankingList.append(row)});
+  rows.forEach((entry,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent=(i+1)+'.º · '+safePublicName(entry.name);const points=document.createElement('strong');points.textContent=entry.points+' pts';row.append(label,points);rankingList.append(row)});
 }
 rankingSelector.onchange=()=>{selectedRanking=rankingSelector.value;renderWeeklySelection()};
 showStandings('weekly');
+
+
+const deleteSection=document.createElement('div');
+deleteSection.innerHTML='<hr><h2>Gerir jornada</h2><p>Seleciona a jornada acima. Ao eliminar, os palpites e a classificação dessa jornada são apagados.</p><button type="button" id="delete-round">Eliminar jornada selecionada</button>';
+manage.append(deleteSection);
+deleteSection.querySelector('#delete-round').onclick=async()=>{
+  if(!adminIds.includes(auth.currentUser?.uid)||!current){alert('Seleciona uma jornada com a tua conta de organização.');return}
+  const chosen={id:current.id,title:current.title};
+  if(!confirm('Eliminar permanentemente a jornada "'+chosen.title+'" e todos os seus palpites? Esta ação não pode ser anulada.'))return;
+  const button=deleteSection.querySelector('#delete-round');button.disabled=true;roundPicker.disabled=true;
+  try{
+    const predictions=await getDocs(collection(db,'rounds',chosen.id,'predictions'));
+    for(let i=0;i<predictions.docs.length;i+=350){const batch=writeBatch(db);predictions.docs.slice(i,i+350).forEach(d=>batch.delete(d.ref));await batch.commit()}
+    await deleteDoc(doc(db,'publicStandings','round_'+chosen.id));
+    await deleteDoc(doc(db,'rounds',chosen.id));
+    const all=await getDocs(collection(db,'rounds')),totals=new Map(),completed=[];
+    for(const round of all.docs){const d=round.data();if(!Array.isArray(d.results)||d.results.length!==7)continue;const ps=await getDocs(collection(db,'rounds',round.id,'predictions'));let rows=[];for(const pred of ps.docs){const p=pred.data();if(!Array.isArray(p.answers))continue;const points=p.answers.reduce((sum,v,i)=>sum+(v===d.results[i]?1:0),0),name=safePublicName(p.displayName);const old=totals.get(pred.id)||{uid:pred.id,name,points:0};old.points+=points;old.name=name;totals.set(pred.id,old);rows.push({name,points})}rows.sort((a,b)=>b.points-a.points||a.name.localeCompare(b.name,'pt'));completed.push({deadline:d.deadline?.toMillis?.()||0,title:d.title||'Jornada',rows})}
+    const total=[...totals.values()].sort((a,b)=>b.points-a.points||a.name.localeCompare(b.name,'pt'));
+    await setDoc(doc(db,'publicStandings','total'),{rows:total});
+    completed.sort((a,b)=>b.deadline-a.deadline);if(completed.length){const {title,rows}=completed[0];await setDoc(doc(db,'publicStandings','weekly'),{title,rows})}else await deleteDoc(doc(db,'publicStandings','weekly'));
+    chosenRound=null;selectedRanking='';alert('Jornada eliminada e classificações atualizadas.');await refresh();await showStandings('weekly');
+  }catch(e){console.error(e);alert('Não foi possível concluir a eliminação. Algumas alterações podem já ter sido feitas; confirma as permissões e tenta atualizar as classificações.')}finally{button.disabled=false;roundPicker.disabled=false}
+};
+
+
