@@ -6,3 +6,6 @@
 /* Página inicial mais equilibrada, com o logótipo em destaque. */
 .brand-label small{display:none}#inicio h1{font-size:clamp(64px,7vw,96px);line-height:.9;margin:24px 0}#inicio:before{width:190px;height:190px;right:7%;top:12px;border:0;border-radius:50%;background-image:url("referencia-futsal-douro.png");background-repeat:no-repeat;background-size:2187px auto;background-position:-638px -84px;box-shadow:0 0 0 1px #6f96b44a,0 16px 40px #0015294d}#inicio>p{max-width:520px}@media(max-width:760px){#inicio h1{font-size:clamp(55px,10vw,78px);max-width:65%}#inicio:before{width:112px;height:112px;right:2%;top:30px;background-size:1289px auto;background-position:-376px -50px;opacity:1}}@media(max-width:400px){#inicio:before{width:85px;height:85px;background-size:978px auto;background-position:-285px -38px;top:40px}}
 
+
+.historic-games{margin:8px 0 20px;border:1px solid #3b5b78;border-radius:7px;color:#e5f0f8}.historic-games summary{cursor:pointer;padding:12px 14px;font-size:13px;font-weight:750}.historic-games>div{padding:0 14px 10px}.historic-game{display:flex;gap:12px;justify-content:space-between;align-items:center;padding:9px 0;border-top:1px solid #36536d;font-size:12px}.historic-game strong{white-space:nowrap;font-size:12px;color:#fff}
+
