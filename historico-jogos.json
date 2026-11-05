@@ -1,0 +1,134 @@
+[
+  {
+    "id": "J1",
+    "games": [
+      {
+        "name": "CD Aves 1930 x Guidões FC",
+        "result": "1"
+      },
+      {
+        "name": "GCR Vermoim x USC Paredes",
+        "result": "1"
+      },
+      {
+        "name": "JD Gaia x ARC Gueifães",
+        "result": null
+      },
+      {
+        "name": "CD Póvoa x Balantuna",
+        "result": "X"
+      },
+      {
+        "name": "CA Sangemil x Cohaemato",
+        "result": "2"
+      },
+      {
+        "name": "GDR Retorta x AM Granja",
+        "result": "2"
+      },
+      {
+        "name": "Ac. Pedras Rubras x Desp. Ordem",
+        "result": "1"
+      }
+    ]
+  },
+  {
+    "id": "J2",
+    "games": [
+      {
+        "name": "Desp. Ordem x CA Sangemil",
+        "result": "1"
+      },
+      {
+        "name": "Guidões FC x JD Gaia",
+        "result": "X"
+      },
+      {
+        "name": "USC Paredes x GDR Retorta",
+        "result": "1"
+      },
+      {
+        "name": "Cohaemato x GCR Vermoim",
+        "result": "2"
+      },
+      {
+        "name": "Balantuna x AC. Pedras Rubras",
+        "result": "2"
+      },
+      {
+        "name": "ARC Gueifães x CD Póvoa",
+        "result": "1"
+      },
+      {
+        "name": "AM Granja x CD Aves 1930",
+        "result": "1"
+      }
+    ]
+  },
+  {
+    "id": "J3",
+    "games": [
+      {
+        "name": "CD Aves 1930 x USC Paredes",
+        "result": "1"
+      },
+      {
+        "name": "CA Sangemil x Balantuna",
+        "result": "X"
+      },
+      {
+        "name": "CD Póvoa x Guidões FC",
+        "result": "1"
+      },
+      {
+        "name": "Cohaemato x CCD Ordem",
+        "result": "1"
+      },
+      {
+        "name": "GCR Vermoim x GDR Retorta",
+        "result": "1"
+      },
+      {
+        "name": "Ac. Pedras Rubras x ARC Gueifães",
+        "result": "1"
+      },
+      {
+        "name": "JD Gaia x AM Granja",
+        "result": "2"
+      }
+    ]
+  },
+  {
+    "id": "J4",
+    "games": [
+      {
+        "name": "Desp Ordem x GCR Vermoim",
+        "result": "2"
+      },
+      {
+        "name": "Guidões FC x Ac. Pedras Rubras",
+        "result": "X"
+      },
+      {
+        "name": "USC Paredes x JD Gaia",
+        "result": "1"
+      },
+      {
+        "name": "Balantuna x Cohaemato",
+        "result": "1"
+      },
+      {
+        "name": "GDR Retorta x CD Aves 1930",
+        "result": "2"
+      },
+      {
+        "name": "ARC Gueifães x CA Sangemil",
+        "result": "2"
+      },
+      {
+        "name": "AM Granja x CD Póvoa",
+        "result": "1"
+      }
+    ]
+  }
+]
