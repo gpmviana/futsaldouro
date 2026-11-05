@@ -62,6 +62,20 @@ const resultsPanel=document.createElement('div');resultsPanel.innerHTML='<hr><h2
 const resultChoices=Array(7).fill(null), resultGames=document.getElementById('result-games');
 for(let i=0;i<7;i++){const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent='Jogo '+(i+1);const buttons=document.createElement('div');buttons.className='choices';['1','X','2'].forEach(v=>{const b=document.createElement('button');b.type='button';b.textContent=v;b.onclick=()=>{resultChoices[i]=v;buttons.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b))};buttons.append(b)});row.append(label,buttons);resultGames.append(row)}
 const rankingList=document.getElementById('ranking-list'),rankingCaption=document.getElementById('ranking-caption');
+const rankingActions=document.createElement('div');rankingActions.className='ranking-actions';rankingActions.innerHTML='<button type="button" id="ranking-find">Encontrar-me</button><button type="button" id="ranking-expand">Ver todos</button><p id="ranking-message" role="status"></p>';rankingList.before(rankingActions);
+let rankingRows=[], rankingExpanded=false, rankingHighlight=null;
+function drawRankingRows(){
+  rankingList.replaceChildren();
+  const visible=rankingExpanded?rankingRows:rankingRows.slice(0,20);
+  const render=(entry,i)=>{const row=document.createElement('div');row.className='row';if(i===rankingHighlight)row.classList.add('ranking-me');const label=document.createElement('span');label.textContent=(i+1)+'.º · '+safePublicName(entry.name);const points=document.createElement('strong');points.textContent=entry.points+' pts';row.append(label,points);rankingList.append(row);return row};
+  visible.forEach((entry,i)=>render(entry,i));
+  if(!rankingExpanded&&rankingHighlight!==null&&rankingHighlight>=20){const separator=document.createElement('p');separator.className='ranking-separator';separator.textContent='A tua posição';rankingList.append(separator);render(rankingRows[rankingHighlight],rankingHighlight)}
+  const toggle=document.getElementById('ranking-expand');toggle.hidden=rankingRows.length<=20;toggle.textContent=rankingExpanded?'Ver top 20':'Ver todos ('+rankingRows.length+')';
+}
+function setRankingRows(rows){rankingRows=rows;rankingExpanded=false;rankingHighlight=null;document.getElementById('ranking-message').textContent='';drawRankingRows()}
+document.getElementById('ranking-expand').onclick=()=>{rankingExpanded=!rankingExpanded;drawRankingRows()};
+document.getElementById('ranking-find').onclick=()=>{const message=document.getElementById('ranking-message'),user=auth.currentUser;if(!user){message.textContent='Entra com Google para encontrares a tua posição.';return}const index=rankingRows.findIndex(x=>x.uid===user.uid);if(index<0){message.textContent='Ainda não encontrámos a tua conta nesta classificação. Para jornadas antigas, pede a associação dos pontos no teu perfil.';return}rankingHighlight=index;message.textContent='Encontrámos a tua posição!';drawRankingRows();rankingList.querySelector('.ranking-me')?.scrollIntoView({behavior:'smooth',block:'nearest'})};
+
 async function showStandings(which){document.getElementById('ranking-week').classList.toggle('active',which==='weekly');document.getElementById('ranking-total').classList.toggle('active',which==='total');rankingList.replaceChildren();try{const snap=await getDoc(doc(db,'publicStandings',which));if(!snap.exists()){rankingCaption.textContent='Ainda não há classificação publicada.';return}const data=snap.data();rankingCaption.textContent=which==='weekly'?'Jornada: '+data.title:'Pontos acumulados nas jornadas corrigidas.';if(!data.rows.length){rankingCaption.textContent+=' Ainda não há palpites corrigidos.';return}data.rows.forEach((entry,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent=(i+1)+'.º · '+safePublicName(entry.name);const points=document.createElement('strong');points.textContent=entry.points+' pts';row.append(label,points);rankingList.append(row)})}catch(e){console.error(e);rankingCaption.textContent='Não foi possível carregar a classificação.'}}
 document.getElementById('ranking-week').onclick=()=>showStandings('weekly');document.getElementById('ranking-total').onclick=()=>showStandings('total');
 document.getElementById('save-results').onclick=async()=>{if(!adminIds.includes(auth.currentUser?.uid)||!current){alert('Entra como organizador e cria uma jornada.');return}if(resultChoices.some(x=>!x)){alert('Seleciona os sete resultados.');return}if(Date.now()<current.deadline.toMillis()){alert('Espera até ao fim do prazo da jornada para publicar resultados.');return}const button=document.getElementById('save-results');button.disabled=true;try{await setDoc(doc(db,'rounds',current.id),{results:resultChoices},{merge:true});const all=await getDocs(collection(db,'rounds'));const totals=new Map();let weekly=[];for(const round of all.docs){const data=round.data();if(!Array.isArray(data.results)||data.results.length!==7)continue;const entries=await getDocs(collection(db,'rounds',round.id,'predictions'));for(const entry of entries.docs){const p=entry.data();if(!Array.isArray(p.answers))continue;const score=p.answers.reduce((sum,answer,i)=>sum+(answer===data.results[i]?1:0),0);const person=totals.get(entry.id)||{uid:entry.id,name:safePublicName(p.displayName),points:0};person.name=safePublicName(p.displayName||person.name);person.points+=score;totals.set(entry.id,person);if(round.id===current.id)weekly.push({uid:entry.id,name:safePublicName(p.displayName),points:score})}}const sort=(a,b)=>b.points-a.points||a.name.localeCompare(b.name,'pt');weekly.sort(sort);const total=[...totals.values()].sort(sort);await setDoc(doc(db,'publicStandings','weekly'),{title:current.title,rows:weekly.map(x=>({...x,name:safePublicName(x.name)}))});await setDoc(doc(db,'publicStandings','round_'+current.id),{title:current.title,rows:weekly.map(x=>({...x,name:safePublicName(x.name)}))});await setDoc(doc(db,'publicStandings','total'),{rows:total.map(x=>({...x,name:safePublicName(x.name)}))});alert('Resultados guardados e classificações atualizadas.');await showStandings('weekly')}catch(e){console.error(e);alert('Não foi possível atualizar. Confirma que publicaste as regras mais recentes e tenta novamente.')}finally{button.disabled=false}};
@@ -106,13 +120,13 @@ showStandings = async function(which) {
       if (baseRow) {
         baseRow.points += Number(row.points)||0;
         baseRow.name = profileByUser.get(row.uid) || row.name || baseRow.name;
-      } else extra.push({name:profileByUser.get(row.uid)||row.name||'Participante',points:Number(row.points)||0});
+      } else extra.push({uid:row.uid,name:profileByUser.get(row.uid)||row.name||'Participante',points:Number(row.points)||0});
     }
     // Um perfil aprovado também altera o nome antes de haver novas jornadas.
-    claimByUser.forEach((name,uid)=>{const row=byName.get(name);if(row && profileByUser.get(uid))row.name=profileByUser.get(uid)});
+    claimByUser.forEach((name,uid)=>{const row=byName.get(name);if(row){row.uid=uid;if(profileByUser.get(uid))row.name=profileByUser.get(uid)}});
     const rows=[...byName.values(),...extra].sort((a,b)=>b.points-a.points||a.name.localeCompare(b.name,'pt'));
     rankingCaption.textContent='Pontos das primeiras jornadas e das jornadas corrigidas no site.';
-    rows.forEach((entry,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent=(i+1)+'.º · '+safePublicName(entry.name);const points=document.createElement('strong');points.textContent=entry.points+' pts';row.append(label,points);rankingList.append(row)});
+    setRankingRows(rows);
   } catch(e) {console.error(e);rankingCaption.textContent='Não foi possível carregar a classificação geral.'}
 };
 
@@ -253,6 +267,7 @@ let selectedRanking='', rankingVersion=0, rankingChoices=new Map(), rankingProfi
 const generalAndOldWeekly=showStandings;
 showStandings=async function(which){
   const version=++rankingVersion;
+  rankingRows=[];rankingExpanded=false;rankingHighlight=null;document.getElementById('ranking-message').textContent='';document.getElementById('ranking-expand').hidden=true;
   rankingSelectorLabel.hidden=which!=='weekly';
   if(which!=='weekly')return generalAndOldWeekly(which);
   document.getElementById('ranking-week').classList.add('active');
@@ -284,7 +299,7 @@ function renderWeeklySelection(){
   rankingCaption.textContent=data.title||'Jornada';
   const rows=Array.isArray(data.rows)?data.rows:[];
   if(!rows.length){rankingCaption.textContent+=' · Ainda não há palpites corrigidos.';return}
-  rows.forEach((entry,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('span');const uid=entry.uid || rankingLegacyClaims.get(safePublicName(entry.name).toLocaleLowerCase('pt'));label.textContent=(i+1)+'.º · '+safePublicName(rankingProfiles.get(uid)||entry.name);const points=document.createElement('strong');points.textContent=entry.points+' pts';row.append(label,points);rankingList.append(row)});
+  setRankingRows(rows.map(entry=>{const uid=entry.uid || rankingLegacyClaims.get(safePublicName(entry.name).toLocaleLowerCase('pt'));return {...entry,uid,name:rankingProfiles.get(uid)||entry.name}}));
 }
 rankingSelector.onchange=()=>{selectedRanking=rankingSelector.value;renderWeeklySelection()};
 showStandings('weekly');
