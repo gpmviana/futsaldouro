@@ -350,3 +350,20 @@ if(adminPage){
 }
 
 
+
+// Jogos históricos: informação pública, sem respostas individuais.
+if(!adminPage){
+  const historyBox=document.createElement('details');historyBox.className='historic-games';
+  const heading=document.createElement('summary');heading.textContent='Ver jogos e resultados da jornada';historyBox.append(heading);
+  const list=document.createElement('div');historyBox.append(list);rankingCaption.after(historyBox);historyBox.hidden=true;
+  let history=new Map();
+  function drawHistory(){
+    const id=selectedRanking.startsWith('legacy_')?selectedRanking.slice(7):'';const item=history.get(id);
+    historyBox.hidden=!item||!document.getElementById('ranking-week').classList.contains('active');list.replaceChildren();
+    if(!item)return;
+    for(const game of item.games){const row=document.createElement('div');row.className='historic-game';const name=document.createElement('span');name.textContent=game.name;const result=document.createElement('strong');result.textContent=game.result||'Sem resultado';row.append(name,result);list.append(row)}
+  }
+  const previousRender=renderWeeklySelection;renderWeeklySelection=function(){previousRender();drawHistory()};
+  document.getElementById('ranking-total').addEventListener('click',()=>{historyBox.hidden=true});
+  fetch('historico-jogos.json?v=1').then(r=>{if(!r.ok)throw new Error('Histórico indisponível');return r.json()}).then(items=>{history=new Map(items.map(item=>[item.id,item]));drawHistory()}).catch(console.error);
+}
