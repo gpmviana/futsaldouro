@@ -9,3 +9,5 @@
 
 .historic-games{margin:8px 0 20px;border:1px solid #3b5b78;border-radius:7px;color:#e5f0f8}.historic-games summary{cursor:pointer;padding:12px 14px;font-size:13px;font-weight:750}.historic-games>div{padding:0 14px 10px}.historic-game{display:flex;gap:12px;justify-content:space-between;align-items:center;padding:9px 0;border-top:1px solid #36536d;font-size:12px}.historic-game strong{white-space:nowrap;font-size:12px;color:#fff}
 
+
+.ranking-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}.ranking-actions button{border:1px solid #8aabc5;background:transparent;color:#fff;border-radius:6px;padding:9px 12px;font-size:12px;font-weight:750}.ranking-actions button:hover{background:#fff;color:#092744}.ranking-actions p{flex-basis:100%;margin:4px 0;color:#c5d7e6;font-size:12px}.live-rankings .row.ranking-me{background:#284f70;border-radius:6px;padding-left:10px;padding-right:10px}.ranking-separator{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#aac6dd;margin:18px 0 3px}
