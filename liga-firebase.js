@@ -259,7 +259,7 @@ showStandings=async function(which){
   document.getElementById('ranking-total').classList.remove('active');
   rankingList.replaceChildren();rankingCaption.textContent='A carregar jornadas…';
   try{
-    const [response,stored]=await Promise.all([fetch('classificacao-jornadas.json'),getDocs(collection(db,'publicStandings'))]);
+    const [response,stored]=await Promise.all([fetch('classificacao-jornadas.json?v=20261105a'),getDocs(collection(db,'publicStandings'))]);
     if(!response.ok)throw new Error('Classificações anteriores indisponíveis');
     const legacy=await response.json();
     if(version!==rankingVersion)return;
