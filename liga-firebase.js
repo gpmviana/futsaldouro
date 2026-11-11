@@ -7,9 +7,19 @@ const auth=getAuth(app), db=getFirestore(app), adminIds=['dFMaDaxMwSdhbRAVREytL4
 const login=document.querySelector('#login-google'), logout=document.querySelector('#logout-google'), name=document.querySelector('#auth-name');
 const adminPage=location.pathname.endsWith('/admin.html'); const league=document.getElementById('liga'), grid=league.querySelector('.grid');
 const ui=document.createElement('section');ui.className='card live-league';ui.style.marginTop='32px';ui.innerHTML='<div class="league-eyebrow">LIGA FD · PALPITES</div><h2>A jornada</h2><p id="league-status">A carregar jornada…</p><div id="live-games"></div><button id="send-live" class="cta" type="button" hidden>Enviar palpites</button><div id="manage" hidden><hr><h2>Área de organização</h2><p>Cria uma jornada de teste. O prazo é interpretado na hora do teu computador.</p><label>Nome da jornada <input id="round-title" placeholder="Ex.: Jornada 5" maxlength="60"></label><div id="edit-games"></div><label>Prazo <input id="round-deadline" type="datetime-local"></label><p><button id="create-round" type="button">Criar jornada</button></p></div>';grid.before(ui);
-let current=null, selected=Array(7).fill(null);
+const MIN_GAMES=7, MAX_GAMES=30;
+let current=null, selected=[];
 const status=document.getElementById('league-status'), games=document.getElementById('live-games'), send=document.getElementById('send-live'), manage=document.getElementById('manage');
-const editor=document.getElementById('edit-games');for(let i=0;i<7;i++){const row=document.createElement('p');const field=document.createElement('input');field.placeholder=`Jogo ${i+1} (ex.: Equipa A × Equipa B)`;field.maxLength=100;field.className='game-input';field.style.cssText='width:100%;padding:10px';row.append(field);editor.append(row)}
+const editor=document.getElementById('edit-games');
+function addGameField(){
+  if(editor.children.length>=MAX_GAMES)return;
+  const row=document.createElement('p'),field=document.createElement('input');
+  field.placeholder=`Jogo ${editor.children.length+1} (ex.: Equipa A × Equipa B)`;field.maxLength=100;field.className='game-input';field.style.cssText='width:100%;padding:10px';row.append(field);
+  if(editor.children.length>=MIN_GAMES){const remove=document.createElement('button');remove.type='button';remove.textContent='Remover';remove.setAttribute('aria-label',`Remover jogo ${editor.children.length+1}`);remove.onclick=()=>{row.remove();[...editor.querySelectorAll('.game-input')].forEach((input,i)=>{input.placeholder=`Jogo ${i+1} (ex.: Equipa A × Equipa B)`});addGameButton.disabled=false};row.append(remove)}
+  editor.append(row);addGameButton.disabled=editor.children.length>=MAX_GAMES;
+}
+const addGameButton=document.createElement('button');addGameButton.type='button';addGameButton.textContent='+ Adicionar jogo';addGameButton.onclick=addGameField;editor.after(addGameButton);
+for(let i=0;i<MIN_GAMES;i++)addGameField();
 function message(s){status.textContent=s}
 const roundPicker=document.createElement('select');
 roundPicker.id='round-picker';
@@ -35,7 +45,7 @@ async function refresh(){
     const next={id:r.id,...r.data()};
     const submitted=auth.currentUser?(await getDoc(doc(db,'rounds',next.id,'predictions',auth.currentUser.uid))).exists():false;
     if(version!==refreshVersion)return;
-    current=next;selected=Array(7).fill(null);games.replaceChildren();
+    current=next;selected=Array(current.games.length).fill(null);games.replaceChildren();
     const closed=current.deadline.toMillis()<=Date.now();
     message(`${current.title} · Prazo: ${current.deadline.toDate().toLocaleString('pt-PT',{timeZone:'Europe/Lisbon'})} (Lisboa). ${submitted?'Já enviaste os teus palpites.':closed?'Prazo terminado.':'Escolhe 1, X ou 2 em cada jogo.'}`);
     current.games.forEach((game,i)=>{
@@ -54,13 +64,17 @@ async function refresh(){
 login.onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){if(e.code!=='auth/popup-closed-by-user')alert('Não foi possível entrar: '+e.code)}};logout.onclick=()=>signOut(auth);
 onAuthStateChanged(auth,user=>{login.hidden=!!user;logout.hidden=!user;name.hidden=!user;name.textContent=user?.displayName||'';manage.hidden=!adminPage || !adminIds.includes(user?.uid);document.getElementById('admin-link').hidden=!adminIds.includes(user?.uid);refresh()});
 send.onclick=async()=>{if(!auth.currentUser){alert('Entra primeiro com Google.');return}if(selected.some(x=>!x)){alert('Escolhe um palpite para cada jogo.');return}send.disabled=true;try{await setDoc(doc(db,'rounds',current.id,'predictions',auth.currentUser.uid),{answers:selected,createdAt:serverTimestamp(),displayName:safePublicName((await getDoc(doc(db,'profiles',auth.currentUser.uid))).data()?.displayName || auth.currentUser.displayName || 'Participante').slice(0,80)});alert('Palpites guardados!');await refresh()}catch(e){console.error(e);alert('Não foi possível guardar. Verifica se o prazo terminou ou se já enviaste palpites.')}finally{send.disabled=false}};
-document.getElementById('create-round').onclick=async()=>{const title=document.getElementById('round-title').value.trim(), list=[...document.querySelectorAll('.game-input')].map(x=>x.value.trim()), date=new Date(document.getElementById('round-deadline').value);if(!title||list.some(x=>!x)||Number.isNaN(date.getTime())||date<=new Date()){alert('Preenche o nome, os sete jogos e um prazo futuro.');return}try{const newRound=doc(collection(db,'rounds'));await setDoc(newRound,{title,games:list,deadline:Timestamp.fromDate(date)});chosenRound=newRound.id;alert('Jornada criada.');await refresh()}catch(e){console.error(e);alert('Não foi possível criar a jornada. Verifica as regras e a tua conta de administrador.')}};
+document.getElementById('create-round').onclick=async()=>{const title=document.getElementById('round-title').value.trim(), list=[...document.querySelectorAll('.game-input')].map(x=>x.value.trim()), date=new Date(document.getElementById('round-deadline').value);if(!title||(list.length<MIN_GAMES||list.length>MAX_GAMES)||list.some(x=>!x)||Number.isNaN(date.getTime())||date<=new Date()){alert('Preenche o nome, todos os jogos e um prazo futuro.');return}try{const newRound=doc(collection(db,'rounds'));await setDoc(newRound,{title,games:list,deadline:Timestamp.fromDate(date)});chosenRound=newRound.id;alert('Jornada criada.');await refresh()}catch(e){console.error(e);alert('Não foi possível criar a jornada. Verifica as regras e a tua conta de administrador.')}};
 
 // Results and public leaderboards are published only by the administrator.
 const rankings=document.createElement('section');rankings.className='card live-rankings';rankings.style.marginTop='24px';rankings.innerHTML='<div class="league-eyebrow">A CORRIDA AO TOPO</div><h2>Classificações</h2><div class="choices ranking-tabs"><button type="button" id="ranking-week">Semanal</button><button type="button" id="ranking-total">Geral</button></div><p id="ranking-caption"></p><div id="ranking-list"></div>';ui.after(rankings);if(!adminPage){const layout=document.createElement("div");layout.className="league-layout";ui.before(layout);layout.append(ui,rankings)}
-const resultsPanel=document.createElement('div');resultsPanel.innerHTML='<hr><h2>Resultados da jornada atual</h2><p>Seleciona os sete resultados finais e publica as classificações.</p><div id="result-games"></div><button type="button" id="save-results">Guardar resultados e atualizar classificações</button>';manage.append(resultsPanel);
-const resultChoices=Array(7).fill(null), resultGames=document.getElementById('result-games');
-for(let i=0;i<7;i++){const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent='Jogo '+(i+1);const buttons=document.createElement('div');buttons.className='choices';['1','X','2'].forEach(v=>{const b=document.createElement('button');b.type='button';b.textContent=v;b.onclick=()=>{resultChoices[i]=v;buttons.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b))};buttons.append(b)});row.append(label,buttons);resultGames.append(row)}
+const resultsPanel=document.createElement('div');resultsPanel.innerHTML='<hr><h2>Resultados da jornada atual</h2><p>Seleciona todos os resultados finais e publica as classificações.</p><div id="result-games"></div><button type="button" id="save-results">Guardar resultados e atualizar classificações</button>';manage.append(resultsPanel);
+const resultChoices=[], resultGames=document.getElementById('result-games');
+function renderResultGames(){
+  const matches=Array.isArray(current?.games)?current.games:[];
+  resultChoices.length=matches.length;resultChoices.fill(null);resultGames.replaceChildren();
+  matches.forEach((game,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent=game;const buttons=document.createElement('div');buttons.className='choices';['1','X','2'].forEach(v=>{const b=document.createElement('button');b.type='button';b.textContent=v;const active=current?.results?.[i]===v;b.classList.toggle('active',active);if(active)resultChoices[i]=v;b.onclick=()=>{resultChoices[i]=v;buttons.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b))};buttons.append(b)});row.append(label,buttons);resultGames.append(row)});
+}
 const rankingList=document.getElementById('ranking-list'),rankingCaption=document.getElementById('ranking-caption');
 const rankingActions=document.createElement('div');rankingActions.className='ranking-actions';rankingActions.innerHTML='<button type="button" id="ranking-find">Encontrar-me</button><button type="button" id="ranking-expand">Ver todos</button><p id="ranking-message" role="status"></p>';rankingList.before(rankingActions);
 let rankingRows=[], rankingExpanded=false, rankingHighlight=null;
@@ -78,7 +92,7 @@ document.getElementById('ranking-find').onclick=()=>{const message=document.getE
 
 async function showStandings(which){document.getElementById('ranking-week').classList.toggle('active',which==='weekly');document.getElementById('ranking-total').classList.toggle('active',which==='total');rankingList.replaceChildren();try{const snap=await getDoc(doc(db,'publicStandings',which));if(!snap.exists()){rankingCaption.textContent='Ainda não há classificação publicada.';return}const data=snap.data();rankingCaption.textContent=which==='weekly'?'Jornada: '+data.title:'Pontos acumulados nas jornadas corrigidas.';if(!data.rows.length){rankingCaption.textContent+=' Ainda não há palpites corrigidos.';return}data.rows.forEach((entry,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.textContent=(i+1)+'.º · '+safePublicName(entry.name);const points=document.createElement('strong');points.textContent=entry.points+' pts';row.append(label,points);rankingList.append(row)})}catch(e){console.error(e);rankingCaption.textContent='Não foi possível carregar a classificação.'}}
 document.getElementById('ranking-week').onclick=()=>showStandings('weekly');document.getElementById('ranking-total').onclick=()=>showStandings('total');
-document.getElementById('save-results').onclick=async()=>{if(!adminIds.includes(auth.currentUser?.uid)||!current){alert('Entra como organizador e cria uma jornada.');return}if(resultChoices.some(x=>!x)){alert('Seleciona os sete resultados.');return}if(Date.now()<current.deadline.toMillis()){alert('Espera até ao fim do prazo da jornada para publicar resultados.');return}const button=document.getElementById('save-results');button.disabled=true;try{await setDoc(doc(db,'rounds',current.id),{results:resultChoices},{merge:true});const all=await getDocs(collection(db,'rounds'));const totals=new Map();let weekly=[];for(const round of all.docs){const data=round.data();if(!Array.isArray(data.results)||data.results.length!==7)continue;const entries=await getDocs(collection(db,'rounds',round.id,'predictions'));for(const entry of entries.docs){const p=entry.data();if(!Array.isArray(p.answers))continue;const score=p.answers.reduce((sum,answer,i)=>sum+(answer===data.results[i]?1:0),0);const person=totals.get(entry.id)||{uid:entry.id,name:safePublicName(p.displayName),points:0};person.name=safePublicName(p.displayName||person.name);person.points+=score;totals.set(entry.id,person);if(round.id===current.id)weekly.push({uid:entry.id,name:safePublicName(p.displayName),points:score})}}const sort=(a,b)=>b.points-a.points||a.name.localeCompare(b.name,'pt');weekly.sort(sort);const total=[...totals.values()].sort(sort);await setDoc(doc(db,'publicStandings','weekly'),{title:current.title,rows:weekly.map(x=>({...x,name:safePublicName(x.name)}))});await setDoc(doc(db,'publicStandings','round_'+current.id),{title:current.title,rows:weekly.map(x=>({...x,name:safePublicName(x.name)}))});await setDoc(doc(db,'publicStandings','total'),{rows:total.map(x=>({...x,name:safePublicName(x.name)}))});alert('Resultados guardados e classificações atualizadas.');await showStandings('weekly')}catch(e){console.error(e);alert('Não foi possível atualizar. Confirma que publicaste as regras mais recentes e tenta novamente.')}finally{button.disabled=false}};
+document.getElementById('save-results').onclick=async()=>{if(!adminIds.includes(auth.currentUser?.uid)||!current){alert('Entra como organizador e cria uma jornada.');return}if(!current.games?.length||resultChoices.length!==current.games.length||resultChoices.some(x=>!x)){alert('Seleciona o resultado de todos os jogos.');return}if(Date.now()<current.deadline.toMillis()){alert('Espera até ao fim do prazo da jornada para publicar resultados.');return}const button=document.getElementById('save-results');button.disabled=true;try{await setDoc(doc(db,'rounds',current.id),{results:resultChoices},{merge:true});const all=await getDocs(collection(db,'rounds'));const totals=new Map();let weekly=[];for(const round of all.docs){const data=round.data();if(!Array.isArray(data.results)||data.results.length!==data.games?.length)continue;const entries=await getDocs(collection(db,'rounds',round.id,'predictions'));for(const entry of entries.docs){const p=entry.data();if(!Array.isArray(p.answers))continue;const score=p.answers.reduce((sum,answer,i)=>sum+(answer===data.results[i]?1:0),0);const person=totals.get(entry.id)||{uid:entry.id,name:safePublicName(p.displayName),points:0};person.name=safePublicName(p.displayName||person.name);person.points+=score;totals.set(entry.id,person);if(round.id===current.id)weekly.push({uid:entry.id,name:safePublicName(p.displayName),points:score})}}const sort=(a,b)=>b.points-a.points||a.name.localeCompare(b.name,'pt');weekly.sort(sort);const total=[...totals.values()].sort(sort);await setDoc(doc(db,'publicStandings','weekly'),{title:current.title,rows:weekly.map(x=>({...x,name:safePublicName(x.name)}))});await setDoc(doc(db,'publicStandings','round_'+current.id),{title:current.title,rows:weekly.map(x=>({...x,name:safePublicName(x.name)}))});await setDoc(doc(db,'publicStandings','total'),{rows:total.map(x=>({...x,name:safePublicName(x.name)}))});alert('Resultados guardados e classificações atualizadas.');await showStandings('weekly')}catch(e){console.error(e);alert('Não foi possível atualizar. Confirma que publicaste as regras mais recentes e tenta novamente.')}finally{button.disabled=false}};
 
 
 
@@ -239,15 +253,7 @@ async function loadSubmissions(){
 submissionsPanel.querySelector('#refresh-submissions').onclick=loadSubmissions;
 submissionsPanel.querySelector('#search-submissions').addEventListener('change',loadSubmissions);
 function syncAdminRound(){
-  resultChoices.fill(null);
-  [...resultGames.children].forEach((row,i)=>{
-    row.querySelector('span').textContent=current?.games?.[i]||'Jogo '+(i+1);
-    row.querySelectorAll('button').forEach(b=>{
-      const active=current?.results?.[i]===b.textContent;
-      b.classList.toggle('active',active);
-      if(active)resultChoices[i]=b.textContent;
-    });
-  });
+  renderResultGames();
   loadSubmissions();
 }
 
@@ -319,7 +325,7 @@ deleteSection.querySelector('#delete-round').onclick=async()=>{
     await deleteDoc(doc(db,'publicStandings','round_'+chosen.id));
     await deleteDoc(doc(db,'rounds',chosen.id));
     const all=await getDocs(collection(db,'rounds')),totals=new Map(),completed=[];
-    for(const round of all.docs){const d=round.data();if(!Array.isArray(d.results)||d.results.length!==7)continue;const ps=await getDocs(collection(db,'rounds',round.id,'predictions'));let rows=[];for(const pred of ps.docs){const p=pred.data();if(!Array.isArray(p.answers))continue;const points=p.answers.reduce((sum,v,i)=>sum+(v===d.results[i]?1:0),0),name=safePublicName(p.displayName);const old=totals.get(pred.id)||{uid:pred.id,name,points:0};old.points+=points;old.name=name;totals.set(pred.id,old);rows.push({uid:pred.id,name,points})}rows.sort((a,b)=>b.points-a.points||a.name.localeCompare(b.name,'pt'));completed.push({deadline:d.deadline?.toMillis?.()||0,title:d.title||'Jornada',rows})}
+    for(const round of all.docs){const d=round.data();if(!Array.isArray(d.results)||d.results.length!==d.games?.length)continue;const ps=await getDocs(collection(db,'rounds',round.id,'predictions'));let rows=[];for(const pred of ps.docs){const p=pred.data();if(!Array.isArray(p.answers))continue;const points=p.answers.reduce((sum,v,i)=>sum+(v===d.results[i]?1:0),0),name=safePublicName(p.displayName);const old=totals.get(pred.id)||{uid:pred.id,name,points:0};old.points+=points;old.name=name;totals.set(pred.id,old);rows.push({uid:pred.id,name,points})}rows.sort((a,b)=>b.points-a.points||a.name.localeCompare(b.name,'pt'));completed.push({deadline:d.deadline?.toMillis?.()||0,title:d.title||'Jornada',rows})}
     const total=[...totals.values()].sort((a,b)=>b.points-a.points||a.name.localeCompare(b.name,'pt'));
     await setDoc(doc(db,'publicStandings','total'),{rows:total});
     completed.sort((a,b)=>b.deadline-a.deadline);if(completed.length){const {title,rows}=completed[0];await setDoc(doc(db,'publicStandings','weekly'),{title,rows})}else await deleteDoc(doc(db,'publicStandings','weekly'));
@@ -337,7 +343,7 @@ if(adminPage){
   const createTitle=document.getElementById('round-title').closest('label');
   const deadlineLabel=document.getElementById('round-deadline').closest('label');
   const createButton=document.getElementById('create-round').closest('p');
-  [createTitle,editor,deadlineLabel,createButton].forEach(x=>createBox.append(x));
+  [createTitle,editor,addGameButton,deadlineLabel,createButton].forEach(x=>createBox.append(x));
   const editBox=document.createElement('section');editBox.className='admin-panel';
   editBox.innerHTML='<div class="admin-kicker">JORNADA SELECIONADA</div><h2>Editar jornada</h2><p>Altera o nome ou prolonga o prazo. Os jogos ficam bloqueados após a criação para proteger os palpites.</p><label>Nome <input id="edit-round-title" maxlength="60"></label><label>Prazo <input id="edit-round-deadline" type="datetime-local"></label><p id="edit-round-status" role="status"></p><button type="button" id="save-round-edits">Guardar alterações</button>';
   const editTitle=editBox.querySelector('#edit-round-title'), editDeadline=editBox.querySelector('#edit-round-deadline'), editStatus=editBox.querySelector('#edit-round-status');
