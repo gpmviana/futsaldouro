@@ -24,6 +24,8 @@ function message(s){status.textContent=s}
 const roundPicker=document.createElement('select');
 roundPicker.id='round-picker';
 roundPicker.setAttribute('aria-label','Escolher jornada');
+function showRoundPickerMessage(text){roundPicker.replaceChildren();const option=document.createElement('option');option.textContent=text;roundPicker.append(option);roundPicker.disabled=true;}
+showRoundPickerMessage('A carregar jornadas…');
 roundPicker.style.cssText='max-width:100%;padding:10px;margin:8px 0 16px';
 const roundLabel=document.createElement('label');
 roundLabel.textContent='Escolher jornada ';
@@ -37,8 +39,8 @@ async function refresh(){
     const snapshot=await getDocs(query(collection(db,'rounds'),orderBy('deadline','desc')));
     if(version!==refreshVersion)return;
     roundPicker.replaceChildren();
-    if(snapshot.empty){current=null;games.replaceChildren();send.hidden=true;roundLabel.hidden=true;message('Ainda não há jornadas criadas.');syncAdminRound();return}
-    roundLabel.hidden=!adminPage;
+    if(snapshot.empty){current=null;games.replaceChildren();send.hidden=true;roundLabel.hidden=!adminPage;showRoundPickerMessage('Ainda não há jornadas');message('Ainda não há jornadas criadas.');syncAdminRound();return}
+    roundLabel.hidden=!adminPage;roundPicker.disabled=false;
     snapshot.docs.forEach(r=>{const o=document.createElement('option');o.value=r.id;o.textContent=r.data().title||'Jornada';roundPicker.append(o)});
     let r=snapshot.docs.find(x=>x.id===chosenRound)||snapshot.docs[0];
     chosenRound=r.id;roundPicker.value=r.id;
@@ -58,7 +60,7 @@ async function refresh(){
     });
     send.hidden=submitted||closed;send.textContent=auth.currentUser?'Enviar palpites':'Entra com Google para enviar';
     syncAdminRound();
-  } catch(e){console.error(e);if(version===refreshVersion)message('Não foi possível carregar a jornada. Verifica a ligação e as regras do Firebase.')}
+  } catch(e){console.error(e);if(version===refreshVersion){showRoundPickerMessage('Erro ao carregar jornadas');message('Não foi possível carregar a jornada. Verifica a ligação e as regras do Firebase.')}}
 }
 
 login.onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){if(e.code!=='auth/popup-closed-by-user')alert('Não foi possível entrar: '+e.code)}};logout.onclick=()=>signOut(auth);
@@ -330,7 +332,7 @@ deleteSection.querySelector('#delete-round').onclick=async()=>{
     await setDoc(doc(db,'publicStandings','total'),{rows:total});
     completed.sort((a,b)=>b.deadline-a.deadline);if(completed.length){const {title,rows}=completed[0];await setDoc(doc(db,'publicStandings','weekly'),{title,rows})}else await deleteDoc(doc(db,'publicStandings','weekly'));
     chosenRound=null;selectedRanking='';alert('Jornada eliminada e classificações atualizadas.');await refresh();await showStandings('weekly');
-  }catch(e){console.error(e);alert('Não foi possível concluir a eliminação. Algumas alterações podem já ter sido feitas; confirma as permissões e tenta atualizar as classificações.')}finally{button.disabled=false;roundPicker.disabled=false}
+  }catch(e){console.error(e);alert('Não foi possível concluir a eliminação. Algumas alterações podem já ter sido feitas; confirma as permissões e tenta atualizar as classificações.')}finally{button.disabled=false;roundPicker.disabled=!current}
 };
 
 
