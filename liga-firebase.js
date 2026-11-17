@@ -388,5 +388,5 @@ if(!adminPage){
   }
   const previousRender=renderWeeklySelection;renderWeeklySelection=function(){previousRender();drawHistory()};
   document.getElementById('ranking-total').addEventListener('click',()=>{historyBox.hidden=true});
-  fetch('historico-jogos.json?v=20261117j5').then(r=>{if(!r.ok)throw new Error('Histórico indisponível');return r.json()}).then(items=>{history=new Map(items.map(item=>[item.id,item]));drawHistory()}).catch(console.error);
+  fetch('historico-jogos.json?v=20261117res').then(r=>{if(!r.ok)throw new Error('Histórico indisponível');return r.json()}).then(items=>{history=new Map(items.map(item=>[item.id,item]));drawHistory()}).catch(console.error);
 }
