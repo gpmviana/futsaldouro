@@ -108,7 +108,7 @@ document.getElementById('save-results').onclick=async()=>{if(!adminIds.includes(
 
 
 // Perfis e pontos anteriores: os pedidos são aprovados pela organização.
-const legacyBase = fetch('classificacao-base.json').then(r => {
+const legacyBase = fetch('classificacao-base.json?v=20261117j5').then(r => {
   if (!r.ok) throw new Error('Não foi possível carregar a classificação anterior.');
   return r.json();
 });
@@ -282,7 +282,7 @@ showStandings=async function(which){
   document.getElementById('ranking-total').classList.remove('active');
   rankingList.replaceChildren();rankingCaption.textContent='A carregar jornadas…';
   try{
-    const [response,stored,profiles,claims]=await Promise.all([fetch('classificacao-jornadas.json?v=20261105a'),getDocs(collection(db,'publicStandings')),getDocs(collection(db,'profiles')),getDocs(collection(db,'legacyClaims'))]);
+    const [response,stored,profiles,claims]=await Promise.all([fetch('classificacao-jornadas.json?v=20261117j5'),getDocs(collection(db,'publicStandings')),getDocs(collection(db,'profiles')),getDocs(collection(db,'legacyClaims'))]);
     rankingProfiles=new Map(profiles.docs.map(p=>[p.id,p.data().displayName]));
     rankingLegacyClaims=new Map(claims.docs.map(c=>[safePublicName(c.data().legacyName).toLocaleLowerCase('pt'),c.data().uid]));
     if(!response.ok)throw new Error('Classificações anteriores indisponíveis');
@@ -388,5 +388,5 @@ if(!adminPage){
   }
   const previousRender=renderWeeklySelection;renderWeeklySelection=function(){previousRender();drawHistory()};
   document.getElementById('ranking-total').addEventListener('click',()=>{historyBox.hidden=true});
-  fetch('historico-jogos.json?v=1').then(r=>{if(!r.ok)throw new Error('Histórico indisponível');return r.json()}).then(items=>{history=new Map(items.map(item=>[item.id,item]));drawHistory()}).catch(console.error);
+  fetch('historico-jogos.json?v=20261117j5').then(r=>{if(!r.ok)throw new Error('Histórico indisponível');return r.json()}).then(items=>{history=new Map(items.map(item=>[item.id,item]));drawHistory()}).catch(console.error);
 }

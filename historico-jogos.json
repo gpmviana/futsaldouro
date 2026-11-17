@@ -130,5 +130,34 @@
         "result": "1"
       }
     ]
+  },
+  {
+    "id": "J5",
+    "games": [
+      {
+        "name": "CD Póvoa x USC Paredes",
+        "result": null
+      },
+      {
+        "name": "CA Sangemil x Guidões FC",
+        "result": null
+      },
+      {
+        "name": "Cohaemato x ARC Gueifães",
+        "result": null
+      },
+      {
+        "name": "JD Gaia x GDR Retorta",
+        "result": null
+      },
+      {
+        "name": "GCR Vermoim x CD Aves 1930",
+        "result": null
+      },
+      {
+        "name": "Ac. Pedras Rubras x AM Granja",
+        "result": null
+      }
+    ]
   }
 ]
