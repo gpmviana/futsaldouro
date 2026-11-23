@@ -300,8 +300,9 @@ showStandings=async function(which){
     let latestKey=null;
     if(latest){
       const data=latest.data();
-      const matching=stored.docs.find(item=>item.id.startsWith('round_') && item.data().title===data.title && JSON.stringify(item.data().rows||[])===JSON.stringify(data.rows||[]));
-      if(matching)latestKey=matching.id;
+      const title=String(data.title||'').trim().toLocaleLowerCase('pt');
+      const matches=stored.docs.filter(item=>item.id.startsWith('round_') && title && String(item.data().title||'').trim().toLocaleLowerCase('pt')===title);
+      if(matches.length===1){latestKey=matches[0].id;rankingChoices.set(latestKey,data)}
       else{latestKey='latest';rankingChoices.set(latestKey,{...data,title:'Última jornada publicada — '+(data.title||'Jornada')})}
     }
     rankingSelector.replaceChildren();
