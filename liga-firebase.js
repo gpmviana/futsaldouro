@@ -7,19 +7,24 @@ const auth=getAuth(app), db=getFirestore(app), adminIds=['dFMaDaxMwSdhbRAVREytL4
 const login=document.querySelector('#login-google'), logout=document.querySelector('#logout-google'), name=document.querySelector('#auth-name');
 const adminPage=location.pathname.endsWith('/admin.html'); const league=document.getElementById('liga'), grid=league.querySelector('.grid');
 const ui=document.createElement('section');ui.className='card live-league';ui.style.marginTop='32px';ui.innerHTML='<div class="league-eyebrow">LIGA FD · PALPITES</div><h2>A jornada</h2><p id="league-status">A carregar jornada…</p><div id="live-games"></div><button id="send-live" class="cta" type="button" hidden>Enviar palpites</button><div id="manage" hidden><hr><h2>Área de organização</h2><p>Cria uma jornada de teste. O prazo é interpretado na hora do teu computador.</p><label>Nome da jornada <input id="round-title" placeholder="Ex.: Jornada 5" maxlength="60"></label><div id="edit-games"></div><label>Prazo <input id="round-deadline" type="datetime-local"></label><p><button id="create-round" type="button">Criar jornada</button></p></div>';grid.before(ui);
-const MIN_GAMES=7, MAX_GAMES=30;
+const MIN_GAMES=1, DEFAULT_GAMES=7, MAX_GAMES=30;
 let current=null, selected=[];
 const status=document.getElementById('league-status'), games=document.getElementById('live-games'), send=document.getElementById('send-live'), manage=document.getElementById('manage');
 const editor=document.getElementById('edit-games');
+function refreshGameFields(){
+  const rows=[...editor.children];
+  rows.forEach((row,i)=>{row.querySelector('.game-input').placeholder=`Jogo ${i+1} (ex.: Equipa A × Equipa B)`;const button=row.querySelector('.remove-game');button.disabled=rows.length<=MIN_GAMES;button.setAttribute('aria-label',`Remover jogo ${i+1}`)});
+  addGameButton.disabled=rows.length>=MAX_GAMES;
+}
 function addGameField(){
   if(editor.children.length>=MAX_GAMES)return;
-  const row=document.createElement('p'),field=document.createElement('input');
-  field.placeholder=`Jogo ${editor.children.length+1} (ex.: Equipa A × Equipa B)`;field.maxLength=100;field.className='game-input';field.style.cssText='width:100%;padding:10px';row.append(field);
-  if(editor.children.length>=MIN_GAMES){const remove=document.createElement('button');remove.type='button';remove.textContent='Remover';remove.setAttribute('aria-label',`Remover jogo ${editor.children.length+1}`);remove.onclick=()=>{row.remove();[...editor.querySelectorAll('.game-input')].forEach((input,i)=>{input.placeholder=`Jogo ${i+1} (ex.: Equipa A × Equipa B)`});addGameButton.disabled=false};row.append(remove)}
-  editor.append(row);addGameButton.disabled=editor.children.length>=MAX_GAMES;
+  const row=document.createElement('p'),field=document.createElement('input'),remove=document.createElement('button');
+  field.maxLength=100;field.className='game-input';field.style.cssText='width:100%;padding:10px';
+  remove.type='button';remove.className='remove-game';remove.textContent='Remover';remove.onclick=()=>{if(editor.children.length>MIN_GAMES){row.remove();refreshGameFields()}};
+  row.append(field,remove);editor.append(row);refreshGameFields();
 }
 const addGameButton=document.createElement('button');addGameButton.type='button';addGameButton.textContent='+ Adicionar jogo';addGameButton.onclick=addGameField;editor.after(addGameButton);
-for(let i=0;i<MIN_GAMES;i++)addGameField();
+for(let i=0;i<DEFAULT_GAMES;i++)addGameField();
 function message(s){status.textContent=s}
 const roundPicker=document.createElement('select');
 roundPicker.id='round-picker';
@@ -390,3 +395,5 @@ if(!adminPage){
   document.getElementById('ranking-total').addEventListener('click',()=>{historyBox.hidden=true});
   fetch('historico-jogos.json?v=20261117res').then(r=>{if(!r.ok)throw new Error('Histórico indisponível');return r.json()}).then(items=>{history=new Map(items.map(item=>[item.id,item]));drawHistory()}).catch(console.error);
 }
+
+
