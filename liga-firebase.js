@@ -297,11 +297,18 @@ showStandings=async function(which){
     legacy.forEach(item=>rankingChoices.set('legacy_'+item.id,item));
     stored.forEach(item=>{if(item.id.startsWith('round_'))rankingChoices.set(item.id,item.data())});
     const latest=stored.docs.find(x=>x.id==='weekly');
-    if(latest)rankingChoices.set('latest',{...latest.data(),title:'Última jornada publicada — '+(latest.data().title||'Jornada')});
+    let latestKey=null;
+    if(latest){
+      const data=latest.data();
+      const matching=stored.docs.find(item=>item.id.startsWith('round_') && item.data().title===data.title && JSON.stringify(item.data().rows||[])===JSON.stringify(data.rows||[]));
+      if(matching)latestKey=matching.id;
+      else{latestKey='latest';rankingChoices.set(latestKey,{...data,title:'Última jornada publicada — '+(data.title||'Jornada')})}
+    }
     rankingSelector.replaceChildren();
     rankingChoices.forEach((value,key)=>{const opt=document.createElement('option');opt.value=key;opt.textContent=value.title||'Jornada';rankingSelector.append(opt)});
     if(!rankingChoices.size){rankingCaption.textContent='Ainda não há classificações publicadas.';return}
-    if(!rankingChoices.has(selectedRanking))selectedRanking=rankingChoices.has('latest')?'latest':rankingChoices.keys().next().value;
+    if(selectedRanking==='latest' && latestKey && latestKey!=='latest')selectedRanking=latestKey;
+    if(!rankingChoices.has(selectedRanking))selectedRanking=latestKey||rankingChoices.keys().next().value;
     rankingSelector.value=selectedRanking;
     renderWeeklySelection();
   }catch(e){console.error(e);if(version===rankingVersion)rankingCaption.textContent='Não foi possível carregar as classificações das jornadas.'}
