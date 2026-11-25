@@ -237,11 +237,11 @@ async function loadAssociationOptions(){
  if(!adminPage||!auth.currentUser||!adminIds.includes(auth.currentUser.uid))return;
  assocStatus.textContent='A carregar…';
  try{
-  const [profiles,claims,base]=await Promise.all([getDocs(collection(db,'profiles')),getDocs(collection(db,'legacyClaims')),legacyBase]);
+  const [profiles,claims,base,total]=await Promise.all([getDocs(collection(db,'profiles')),getDocs(collection(db,'legacyClaims')),legacyBase,getDoc(doc(db,'publicStandings','total'))]);
   const usedUids=new Set(),usedNames=new Set();
   claims.forEach(d=>{const v=d.data();if(v.uid)usedUids.add(v.uid);if(v.legacyName)usedNames.add(v.legacyName.toLocaleLowerCase('pt'))});
   assocUser.replaceChildren(new Option('Escolher conta',''));assocOld.replaceChildren(new Option('Escolher nome',''));
-  profiles.docs.filter(d=>!usedUids.has(d.id)).sort((a,b)=>(a.data().displayName||'').localeCompare(b.data().displayName||'','pt')).forEach(d=>assocUser.add(new Option((d.data().displayName||'Participante')+' · '+d.id.slice(-6),d.id)));
+  const available=new Map(); (total.exists()?total.data().rows||[]:[]).forEach(r=>{if(r.uid)available.set(r.uid,r.name||'Participante')}); profiles.docs.forEach(d=>available.set(d.id,d.data().displayName||available.get(d.id)||'Participante')); [...available.entries()].filter(([uid])=>!usedUids.has(uid)).sort((a,b)=>a[1].localeCompare(b[1],'pt')).forEach(([uid,name])=>assocUser.add(new Option(name+' · '+uid.slice(-6),uid)));
   base.filter(x=>!usedNames.has(x.name.toLocaleLowerCase('pt'))).sort((a,b)=>a.name.localeCompare(b.name,'pt')).forEach(x=>assocOld.add(new Option(x.name+' · '+x.points+' pts',x.name)));
   assocStatus.textContent='Seleciona os dois registos e verifica se pertencem à mesma pessoa.';
  }catch(e){console.error(e);assocStatus.textContent='Não foi possível carregar as contas.'}
