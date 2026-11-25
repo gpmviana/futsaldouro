@@ -229,6 +229,44 @@ async function loadRequests(){
 }
 requestsPanel.querySelector('#requests-refresh').onclick=loadRequests;
 
+const manualAssociation=document.createElement('div');
+manualAssociation.innerHTML='<hr><h2>Associar pontos anteriores</h2><p>Escolhe a conta atual e o nome usado anteriormente. Confirma a identidade antes de associar.</p><button type="button" id="assoc-refresh">Atualizar lista</button><p><label>Conta atual <select id="assoc-user"><option value="">Escolher conta</option></select></label></p><p><label>Nome anterior <select id="assoc-old"><option value="">Escolher nome</option></select></label></p><button type="button" id="assoc-save">Associar pontos</button><p id="assoc-status" role="status"></p>';
+requestsPanel.append(manualAssociation);
+const assocUser=manualAssociation.querySelector('#assoc-user'),assocOld=manualAssociation.querySelector('#assoc-old'),assocStatus=manualAssociation.querySelector('#assoc-status');
+async function loadAssociationOptions(){
+ if(!adminPage||!auth.currentUser||!adminIds.includes(auth.currentUser.uid))return;
+ assocStatus.textContent='A carregar…';
+ try{
+  const [profiles,claims,base]=await Promise.all([getDocs(collection(db,'profiles')),getDocs(collection(db,'legacyClaims')),legacyBase]);
+  const usedUids=new Set(),usedNames=new Set();
+  claims.forEach(d=>{const v=d.data();if(v.uid)usedUids.add(v.uid);if(v.legacyName)usedNames.add(v.legacyName.toLocaleLowerCase('pt'))});
+  assocUser.replaceChildren(new Option('Escolher conta',''));assocOld.replaceChildren(new Option('Escolher nome',''));
+  profiles.docs.filter(d=>!usedUids.has(d.id)).sort((a,b)=>(a.data().displayName||'').localeCompare(b.data().displayName||'','pt')).forEach(d=>assocUser.add(new Option((d.data().displayName||'Participante')+' · '+d.id.slice(-6),d.id)));
+  base.filter(x=>!usedNames.has(x.name.toLocaleLowerCase('pt'))).sort((a,b)=>a.name.localeCompare(b.name,'pt')).forEach(x=>assocOld.add(new Option(x.name+' · '+x.points+' pts',x.name)));
+  assocStatus.textContent='Seleciona os dois registos e verifica se pertencem à mesma pessoa.';
+ }catch(e){console.error(e);assocStatus.textContent='Não foi possível carregar as contas.'}
+}
+manualAssociation.querySelector('#assoc-refresh').onclick=loadAssociationOptions;
+manualAssociation.querySelector('#assoc-save').onclick=async()=>{
+ const uid=assocUser.value,name=assocOld.value,btn=manualAssociation.querySelector('#assoc-save');
+ if(!adminPage||!auth.currentUser||!adminIds.includes(auth.currentUser.uid)||!uid||!name){assocStatus.textContent='Escolhe uma conta e um nome anterior.';return}
+ if(!confirm('Associar os pontos de '+name+' à conta selecionada? Confirma que pertencem à mesma pessoa.'))return;
+ btn.disabled=true;assocStatus.textContent='A associar…';
+ try{
+  const base=await legacyBase;if(!base.some(x=>x.name===name))throw new Error('Nome anterior não encontrado.');
+  const claim=doc(db,'legacyClaims',encodeURIComponent(name.toLowerCase())),account=doc(db,'legacyAccounts',uid),request=doc(db,'profileRequests',uid);
+  await runTransaction(db,async tx=>{
+   const [c,a,r]=await Promise.all([tx.get(claim),tx.get(account),tx.get(request)]);
+   if(c.exists()||a.exists())throw new Error('Esta conta ou este nome já está associado.');
+   if(r.exists()&&r.data().legacyName!==name)throw new Error('Existe um pedido diferente para esta conta; revê-o primeiro.');
+   tx.set(claim,{uid,legacyName:name});tx.set(account,{legacyName:name});if(r.exists())tx.delete(request);
+  });
+  await loadRequests();await loadAssociationOptions();assocStatus.textContent='Pontos associados com sucesso.';
+ }catch(e){console.error(e);assocStatus.textContent='Não foi possível associar: '+(e.message||'verifica as permissões.')}
+ finally{btn.disabled=false}
+};
+
+
 
 
 const submissionsPanel=document.createElement('div');
@@ -381,7 +419,7 @@ if(adminPage){
   const content=document.createElement('div');content.className='admin-content';
   const sections=[['jornadas','Jornadas',[createBox,editBox,deleteSection]],['resultados','Resultados',[resultsPanel]],['palpites','Palpites',[submissionsPanel]],['pedidos','Pedidos',[requestsPanel]]];
   const panels=[];
-  sections.forEach(([id,label,children],index)=>{const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.adminSection=id;button.setAttribute('aria-pressed',index===0?'true':'false');nav.append(button);const panel=document.createElement('div');panel.className='admin-view';panel.hidden=index!==0;children.forEach(child=>{child.classList.add('admin-panel');panel.append(child)});content.append(panel);panels.push({id,button,panel});button.onclick=()=>{panels.forEach(item=>{const active=item.id===id;item.panel.hidden=!active;item.button.setAttribute('aria-pressed',active?'true':'false')});if(id==='palpites')loadSubmissions();if(id==='pedidos')loadRequests()}});
+  sections.forEach(([id,label,children],index)=>{const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.adminSection=id;button.setAttribute('aria-pressed',index===0?'true':'false');nav.append(button);const panel=document.createElement('div');panel.className='admin-view';panel.hidden=index!==0;children.forEach(child=>{child.classList.add('admin-panel');panel.append(child)});content.append(panel);panels.push({id,button,panel});button.onclick=()=>{panels.forEach(item=>{const active=item.id===id;item.panel.hidden=!active;item.button.setAttribute('aria-pressed',active?'true':'false')});if(id==='palpites')loadSubmissions();if(id==='pedidos'){loadRequests();loadAssociationOptions()}}});
   manage.replaceChildren();dashboard.append(overview,nav,content);manage.append(dashboard);fillRoundEdit();
 }
 
